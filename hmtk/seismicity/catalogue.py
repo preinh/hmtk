@@ -105,7 +105,7 @@ class Catalogue(object):
 #        self.default_completeness = None
 
     def get_number_events(self):
-        return len(self.data[self.data.keys()[0]])
+        return len(self.data['magnitude'])
 
     def add_event(self):
         raise NotImplementedError

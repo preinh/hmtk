@@ -159,9 +159,11 @@ def check_completeness_table(completeness_table, catalogue):
                           np.min(catalogue.data['magnitude'])]])
 
 
-def get_even_magnitude_completeness(completeness_table, catalogue=None):
+def get_even_magnitude_completeness(completeness_table, 
+                                    catalogue=None, 
+                                    magnitude_increment=0.1):
     '''
-    To make the magnitudes evenly spaced, render to a constant 0.1
+    To make the magnitudes evenly spaced, render to a constant 'magnitude_increment'
     magnitude unit
 
     :param np.ndarray completeness_table:
@@ -170,22 +172,25 @@ def get_even_magnitude_completeness(completeness_table, catalogue=None):
     :param catalogue:
         Instance of hmtk.seismicity.catalogue.Catalogue class
 
+    :param float magnitude_increment:
+        Magnitude increment value, default 0.1
+
     :returns:
         Correct completeness table
 
     '''
     mmax = np.floor(10. * np.max(catalogue.data['magnitude'])) / 10.
     check_completeness_table(completeness_table, catalogue)
-    cmag = np.hstack([completeness_table[:, 1], mmax + 0.1])
+    cmag = np.hstack([completeness_table[:, 1], mmax + magnitude_increment])
     cyear = np.hstack([completeness_table[:, 0], completeness_table[-1, 0]])
     if np.shape(completeness_table)[0] == 1:
         # Simple single-valued table
-        return completeness_table, 0.1
+        return completeness_table, magnitude_increment
 
     for iloc in range(0, len(cmag) - 1):
         mrange = np.arange(np.floor(10. * cmag[iloc]) / 10.,
                            (np.ceil(10. * cmag[iloc + 1]) / 10.),
-                           0.1)
+                           magnitude_increment)
         temp_table = np.column_stack([
             cyear[iloc] * np.ones(len(mrange), dtype=float),
             mrange])
@@ -196,4 +201,4 @@ def get_even_magnitude_completeness(completeness_table, catalogue=None):
                                             temp_table])
     #completeness_table = np.vstack([completeness_table,
     #    np.array([[cyear[-1], cmag[-1]]])])
-    return completeness_table, 0.1
+    return completeness_table, magnitude_increment

@@ -135,7 +135,7 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     if logscale:
         normaliser = LogNorm(vmin=vmin_val, vmax=np.max(mag_depth_dist))
     else:
-        normaliser = Normalise(vmin=0, vmax=np.max(mag_depth_dist))
+        normaliser = Normalize(vmin=0, vmax=np.max(mag_depth_dist))
     plt.figure(figsize=DEFAULT_SIZE)
     plt.pcolor(mag_bins[:-1],
                depth_bins[:-1],
@@ -270,7 +270,7 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
         else:
             high_mag = completeness[iloc + 1, 1]
             mag_idx = np.logical_and(
-                catalogue.data['magnitude'] >= low_mag - dmag / 2.,
+                catalogue.data['magnitude'] >= low_mag - (dmag / 2.),
                 catalogue.data['magnitude'] < high_mag)
 
             idx = np.logical_and(mag_idx,
