@@ -56,6 +56,41 @@ import numpy as np
 from hmtk.seismicity.utils import haversine
 from hmtk.seismicity.smoothing.kernels.base import BaseSmoothingKernel
 
+class Frankel_1995(BaseSmoothingKernel):
+    
+    def __init__(self, c, d, D=1.75):
+        self.D = D
+        self.H = lambda m : c*np.exp(m*d)
+
+    def smooth_data(self):
+        pass
+
+    def kernel(self, M, r):
+        h = self.H(M)
+        #if r > h: return 0
+
+        # K(M, x) = [D/2nh(M)] {h(M)/r}^2-D
+        k = ( self.D / (2*np.pi*h)) * (h / r)**(2 - self.D)
+        #print k
+        return k
+    
+    
+    def _seismic_rate(self, catalogue, magnitude):
+        # sum 
+        rate_locations = np.zeros(self.grid_locations.shape)
+        
+        event_locations = np.array([catalogue.data['longitude'], 
+                                     catalogue.data['latitude']])
+        
+        h = self.H(magnitude)
+        
+        d = lambda x, y : np.sqrt( y^2 + x^2 )
+        for x in self.grid_locations:
+            
+            r = [ d for d in d(x, event_locations) if d <= h ] 
+        
+        pass
+
 
 class IsotropicGaussianWoo(BaseSmoothingKernel):
     '''

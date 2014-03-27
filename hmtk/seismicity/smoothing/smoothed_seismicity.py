@@ -58,9 +58,11 @@ from hmtk.seismicity.smoothing import utils
 from hmtk.seismicity.smoothing.kernels.isotropic_gaussian import \
     IsotropicGaussian
 from hmtk.seismicity.smoothing.kernels.woo_1996 import \
-    IsotropicGaussianWoo
+    IsotropicGaussianWoo, Frankel_1995
 
 from hmtk.registry import CatalogueFunctionRegistry
+
+from hmtk.seismicity.utils import haversine
 
 
 class Grid(collections.OrderedDict):
@@ -602,7 +604,9 @@ class SmoothedSeismicityWoo(object):
 
         
         _data = self._get_bandwidth_data()         # mags, mean_minimum_pairwise_distance
-        c, d = self._fit_bandwidth_data(_data)     # optimize H(m)
+        c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
+        self.c = c
+        self.d = d
 
         m = self.catalogue.data['magnitude']
         self.catalogue.data['bandwidth'] = H(m, c, d)
@@ -703,11 +707,90 @@ class SmoothedSeismicityWoo(object):
 #         pl.show()
 #         #savefig('power_law_fit.png')
     
-        return c, d
+        return c, c_err, d, d_err
 
     def _seismicity_rate(self, m=None, r=None):
+        
+        
+        
+        k = Frankel_1995()
+        #print 
         # sum kernel(m, r)  / completeness_time(m)
         pass 
+
+
+#     def _grid2d(self, x1, x2):
+#         return 
+
+    def _create_grid(self, use3d=False):
+        l = self.grid_limits
+
+        dx = l['xspc']
+        dy = l['yspc']
+        dz = l['zspc']
+        
+        x = np.arange(l['xmin'] + dx/2., l['xmax'], dx) 
+        y = np.arange(l['ymin'] + dy/2., l['ymax'], dy) 
+        z = np.arange(l['zmin'] + dz/2., l['zmax'], dz)
+        
+        spacement = []
+        cells = []
+        if not use3d:
+            spacement = [dx, dy]
+            for x_i in x:
+                for y_i in y:
+                    cells.append((x_i, y_i))
+
+        else:
+            spacement = [dx, dy, dz]
+            for x_i in x:
+                for y_i in y:
+                    for z_i in z:
+                        cells.append((x_i, y_i, z_i))
+
+
+        cells = np.array(cells)
+        
+        return cells, spacement
+
+#         exit()
+# 
+#         if use3d:
+#             
+#             xx, yy, zz = np.meshgrid(x, y, z)
+#         else:
+#             xx, yy = np.meshgrid(x, y)
+
+        
+        #from matplotlib import pylab
+        #from mpl_toolkits.mplot3d import Axes3D
+        
+        #f = pylab.figure()
+        #ax = Axes3D(f)
+        
+        #ax.scatter(xx, yy, zz)
+        #pylab.show()
+        #xx, yy, zz = np.meshgrid(x, y, z)
+        #print xx, yy, zz
+        #for z in z:
+#         print len(xx)
+#         X = xx, yy
+#         for i in range(len(xx)-1):
+#             for j in range(len(yy)-1):
+#                 print xx[i, j], yy[i, j] 
+        
+        
+    def _get_observation_time(self, m, completeness_table, last_year):
+        ct = completeness_table
+
+        i = ct[:,1] >= m    # all values after desired mag...
+        _mt = min(ct[i,1])  # min of these values
+        i = np.where(ct[:,1] == _mt) # index of
+
+        observation_time = last_year - ct[i, 0][0][0] # corresponding year
+
+        return observation_time
+    
 
     def run_analysis(self, catalogue, config, completeness_table=None, smoothing_kernel=IsotropicGaussianWoo):
         '''
@@ -743,17 +826,121 @@ class SmoothedSeismicityWoo(object):
             Full smoothed seismicity data as np.ndarray, of the form
             [Longitude, Latitude, Depth, Observed, Smoothed]
         '''
+        config['min_magnitude']
+        
         self.catalogue = catalogue
         self.completeness_table = completeness_table
         self.config = config
         self.add_bandwith_values()
+ 
+        use3d=config['use3d']
+        cells, spacement = self._create_grid(use3d=use3d)
+        k = Frankel_1995(self.c, self.d)
+        
+        ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
+                                                       catalogue, 
+                                                       magnitude_increment=0.5)
+
+        last_year = catalogue.end_year
+                
+        # get data
+        X = self.catalogue.data['magnitude']
+        magnitude_bin = dm
+        
+        min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(X)
+        max_magnitude = self.config['max_magnitude'] if self.config['max_magnitude'] else max(X)
+        
+        # divide bins catalog_bins
+        bins = np.arange(min_magnitude, max_magnitude + magnitude_bin, magnitude_bin)
+
+        h , m = [], []
+        for b in bins:
+            _h = k.H(b + magnitude_bin/2.) * self.config['bandwidth_h_limit']
+            _m = b + magnitude_bin/2.
+
+            observation_time = self._get_observation_time(_m, ct, last_year)
+  
+            fid = open('/Users/pirchiner/Desktop/tmp_woo.%s.csv'%_m, 'wt')
+            # Create header list
+            header_info = ['Longitude', 'Latitude', 'Depth', 'Magnitude','Rate']
+            writer = csv.DictWriter(fid, fieldnames=header_info)
+            headers = dict((name0, name0) for name0 in header_info)
+            # Write to file
+            writer.writerow(headers)
+            
+            _i = np.logical_and( X >= _m - magnitude_bin/2., 
+                                 X  < _m + magnitude_bin/2.)
+            
+            print _m, observation_time
+
+            for c in cells:
+                x0 = c[0]
+                y0 = c[1]
+                z0 = 0 if not use3d else c[2]  
+    
+                r = haversine(np.array(x0), 
+                              np.array(y0), 
+                              catalogue.data['longitude'][_i],
+                              catalogue.data['latitude'][_i])
+                #print _h
+                _j = np.logical_and(0 < r, r <= _h)
+                #print len(r), len(_j)
+                r = r[_j]
+
+                _k = k.kernel(_m, r) / observation_time
+                
+                rate = _k.sum()
+                
+                #print len(_k), _k.sum()
+                #print x0, y0, _m, _k.sum()
+                row_dict = {'Longitude': '%.5f' % x0,
+                            'Latitude': '%.5f' % y0,
+                            'Depth': '%.3f' % 0,
+                            'Magnitude': '%.5e' % _m,
+                            'Rate': '%.5e' % rate }
+                writer.writerow(row_dict)
+
+            fid.close()
+
+            
+            #print X[_i]
+#             if len(X[_i]) > 0:
+#                 # calculate distances on bin
+#                 from hmtk.seismicity.utils import haversine
+#                 d = haversine(self.catalogue.data['longitude'][_i], 
+#                               self.catalogue.data['latitude'][_i],
+#                               self.catalogue.data['longitude'][_i], 
+#                               self.catalogue.data['latitude'][_i])
+#                 
+#                 # média das distancias mínimas e centro do magnitude_bin
+#                 m.append(b + magnitude_bin/ 2.)  
+#                 h.append(np.sort(d)[:,1].mean()) 
+        
+        
+        
+        
+        #print ct[:,1]
+
+        
+
+            #print r.shape
+            #print k.kernel(5, r)
+
+            #print x0, y0
+            
+        
+        #print last_year, spacement, cells
+        
+        
+        #_idx = 
+        #observation_time = 
         
         #print self.catalogue.data['bandwidth']
-        magnitudes = []
-        
-        for i, m in enumerate(magnitudes):
-            r = np.array([self.catalogue.data['lat'][i], self.catalogue.data['lon'][i], self.catalogue.data['depth'][i]])
-            l = self._seismicity_rate(m, r)
+#         magnitudes = []
+#         
+#         for i, m in enumerate(magnitudes):
+#             r = np.array([self.catalogue.data['lat'][i], self.catalogue.data['lon'][i], self.catalogue.data['depth'][i]])
+#             l = self._seismicity_rate(m, r)
             
         
         # para cada celula do grid
@@ -854,173 +1041,173 @@ class SmoothedSeismicityWoo(object):
 #         self.data = np.column_stack([self.data, smoothed_data])
 #         return self.data
 
-    def create_2D_grid_simple(self, longitude, latitude, year, magnitude,
-                              completeness_table, t_f=1., mag_inc=0.1):
-        '''
-        Generates the grid from the limits using an approach closer to that of
-        Frankel (1995)
-        :param numpy.ndarray longitude:
-            Vector of earthquake longitudes
-
-        :param numpy.ndarray latitude:
-            Vector of earthquake latitudes
-
-        :param numpy.ndarray year:
-            Vector of earthquake years
-
-        :param numpy.ndarray magnitude:
-            Vector of earthquake magnitudes
-
-        :param numpy.ndarray completeness_table:
-            Completeness table
-
-        :param float t_f:
-            Weichert adjustment factor
-
-
-        :returns:
-           Two-dimensional spatial grid of observed rates
-
-        '''
-        assert mag_inc > 0.
-
-        xlim = np.ceil(
-            (self.grid_limits['xmax'] - self.grid_limits['xmin']) /
-            self.grid_limits['xspc'])
-        ylim = np.ceil(
-            (self.grid_limits['ymax'] - self.grid_limits['ymin']) /
-            self.grid_limits['yspc'])
-        ncolx = int(xlim)
-        ncoly = int(ylim)
-        grid_count = np.zeros(ncolx * ncoly, dtype=float)
-        for iloc in range(0, len(longitude)):
-            dlon = (longitude[iloc] - self.grid_limits['xmin']) /\
-                self.grid_limits['xspc']
-            if (dlon < 0.) or (dlon > xlim):
-                # Earthquake outside longitude limits
-                continue
-            xcol = int(dlon)
-            if xcol == ncolx:
-                # If longitude is directly on upper grid line then retain
-                xcol = ncolx - 1
-            dlat = fabs(self.grid_limits['ymax'] - latitude[iloc]) /\
-                self.grid_limits['yspc']
-            if (dlat < 0.) or (dlat > ylim):
-                # Earthquake outside latitude limits
-                continue
-            ycol = int(dlat)  # Correct for floating precision
-            if ycol == ncoly:
-                # If latitude is directly on upper grid line then retain
-                ycol = ncoly - 1
-            kmarker = (ycol * int(xlim)) + xcol
-            adjust = _get_adjustment(magnitude[iloc],
-                                     year[iloc],
-                                     completeness_table[0, 1],
-                                     completeness_table[:, 0],
-                                     t_f,
-                                     mag_inc)
-            if adjust:
-                grid_count[kmarker] = grid_count[kmarker] + adjust
-        return grid_count
-
-    def create_3D_grid(self, catalogue, completeness_table, t_f=1.0,
-                       mag_inc=0.1):
-        '''
-        Counts the earthquakes observed in a three dimensional grid
-
-
-        :param catalogue:
-            Instance of the hmtk.seismicity.catalogue.Catalogue class
-            catalogue.data dictionary containing the following -
-            'year' - numpy.ndarray vector of years
-            'longitude' - numpy.ndarray vector of longitudes
-            'latitude' - numpy.ndarray vector of latitudes
-            'depth' - numpy.ndarray vector of depths
-
-        :param np.ndarray completeness_table:
-            Completeness of the catalogue assuming evenly spaced magnitudes
-            from most recent bin to oldest bin [year, magnitude]
-
-        :param float t_f:
-            Weichert adjustment factor
-
-        :param float mag_inc:
-            Increment of the completeness magnitude (rendered 0.1)
-
-        :returns:
-           Three-dimensional spatial grid of observed rates (or two dimensional
-           if only one depth layer is considered)
-
-        '''
-        x_bins = np.arange(self.grid_limits['xmin'],
-                           self.grid_limits['xmax'],
-                           self.grid_limits['xspc'])
-        if x_bins[-1] < self.grid_limits['xmax']:
-            x_bins = np.hstack([x_bins, x_bins[-1] + self.grid_limits['xspc']])
-
-        y_bins = np.arange(self.grid_limits['ymin'],
-                           self.grid_limits['ymax'],
-                           self.grid_limits['yspc'])
-        if y_bins[-1] < self.grid_limits['ymax']:
-            y_bins = np.hstack([y_bins, y_bins[-1] + self.grid_limits['yspc']])
-
-        z_bins = np.arange(self.grid_limits['zmin'],
-                           self.grid_limits['zmax'] + self.grid_limits['zspc'],
-                           self.grid_limits['zspc'])
-
-        if z_bins[-1] < self.grid_limits['zmax']:
-            z_bins = np.hstack([z_bins, z_bins[-1] + self.grid_limits['zspc']])
-
-        # Define centre points of grid cells
-        gridx, gridy = np.meshgrid((x_bins[1:] + x_bins[:-1]) / 2.,
-                                   (y_bins[1:] + y_bins[:-1]) / 2.)
-
-        n_x, n_y = np.shape(gridx)
-        gridx = np.reshape(gridx, [n_x * n_y, 1])
-        gridy = np.reshape(np.flipud(gridy), [n_x * n_y, 1])
-
-        # Only one depth range
-        idx = np.logical_and(catalogue.data['depth'] >= z_bins[0],
-                             catalogue.data['depth'] < z_bins[1])
-        mid_depth = (z_bins[0] + z_bins[1]) / 2.
-
-        data_grid = np.column_stack([
-            gridx,
-            gridy,
-            mid_depth * np.ones(n_x * n_y, dtype=float),
-            self.create_2D_grid_simple(catalogue.data['longitude'][idx],
-                                       catalogue.data['latitude'][idx],
-                                       catalogue.data['year'][idx],
-                                       catalogue.data['magnitude'][idx],
-                                       completeness_table,
-                                       t_f,
-                                       mag_inc)])
-
-        if len(z_bins) < 3:
-            # Only one depth range
-            self.data = data_grid
-            return
-
-        # Multiple depth layers - append to grid
-        for iloc in range(1, len(z_bins) - 1):
-            idx = np.logical_and(catalogue.data['depth'] >= z_bins[iloc],
-                                 catalogue.data['depth'] < z_bins[iloc + 1])
-            mid_depth = (z_bins[iloc] + z_bins[iloc + 1]) / 2.
-
-            temp_grid = np.column_stack([
-                gridx,
-                gridy,
-                mid_depth * np.ones(n_x * n_y, dtype=float),
-                self.create_2D_grid_simple(catalogue.data['longitude'][idx],
-                                           catalogue.data['latitude'][idx],
-                                           catalogue.data['year'][idx],
-                                           catalogue.data['magnitude'][idx],
-                                           completeness_table,
-                                           t_f,
-                                           mag_inc)])
-
-            data_grid = np.vstack([data_grid, temp_grid])
-        self.data = data_grid
+#     def create_2D_grid_simple(self, longitude, latitude, year, magnitude,
+#                               completeness_table, t_f=1., mag_inc=0.1):
+#         '''
+#         Generates the grid from the limits using an approach closer to that of
+#         Frankel (1995)
+#         :param numpy.ndarray longitude:
+#             Vector of earthquake longitudes
+# 
+#         :param numpy.ndarray latitude:
+#             Vector of earthquake latitudes
+# 
+#         :param numpy.ndarray year:
+#             Vector of earthquake years
+# 
+#         :param numpy.ndarray magnitude:
+#             Vector of earthquake magnitudes
+# 
+#         :param numpy.ndarray completeness_table:
+#             Completeness table
+# 
+#         :param float t_f:
+#             Weichert adjustment factor
+# 
+# 
+#         :returns:
+#            Two-dimensional spatial grid of observed rates
+# 
+#         '''
+#         assert mag_inc > 0.
+# 
+#         xlim = np.ceil(
+#             (self.grid_limits['xmax'] - self.grid_limits['xmin']) /
+#             self.grid_limits['xspc'])
+#         ylim = np.ceil(
+#             (self.grid_limits['ymax'] - self.grid_limits['ymin']) /
+#             self.grid_limits['yspc'])
+#         ncolx = int(xlim)
+#         ncoly = int(ylim)
+#         grid_count = np.zeros(ncolx * ncoly, dtype=float)
+#         for iloc in range(0, len(longitude)):
+#             dlon = (longitude[iloc] - self.grid_limits['xmin']) /\
+#                 self.grid_limits['xspc']
+#             if (dlon < 0.) or (dlon > xlim):
+#                 # Earthquake outside longitude limits
+#                 continue
+#             xcol = int(dlon)
+#             if xcol == ncolx:
+#                 # If longitude is directly on upper grid line then retain
+#                 xcol = ncolx - 1
+#             dlat = fabs(self.grid_limits['ymax'] - latitude[iloc]) /\
+#                 self.grid_limits['yspc']
+#             if (dlat < 0.) or (dlat > ylim):
+#                 # Earthquake outside latitude limits
+#                 continue
+#             ycol = int(dlat)  # Correct for floating precision
+#             if ycol == ncoly:
+#                 # If latitude is directly on upper grid line then retain
+#                 ycol = ncoly - 1
+#             kmarker = (ycol * int(xlim)) + xcol
+#             adjust = _get_adjustment(magnitude[iloc],
+#                                      year[iloc],
+#                                      completeness_table[0, 1],
+#                                      completeness_table[:, 0],
+#                                      t_f,
+#                                      mag_inc)
+#             if adjust:
+#                 grid_count[kmarker] = grid_count[kmarker] + adjust
+#         return grid_count
+# 
+#     def create_3D_grid(self, catalogue, completeness_table, t_f=1.0,
+#                        mag_inc=0.1):
+#         '''
+#         Counts the earthquakes observed in a three dimensional grid
+# 
+# 
+#         :param catalogue:
+#             Instance of the hmtk.seismicity.catalogue.Catalogue class
+#             catalogue.data dictionary containing the following -
+#             'year' - numpy.ndarray vector of years
+#             'longitude' - numpy.ndarray vector of longitudes
+#             'latitude' - numpy.ndarray vector of latitudes
+#             'depth' - numpy.ndarray vector of depths
+# 
+#         :param np.ndarray completeness_table:
+#             Completeness of the catalogue assuming evenly spaced magnitudes
+#             from most recent bin to oldest bin [year, magnitude]
+# 
+#         :param float t_f:
+#             Weichert adjustment factor
+# 
+#         :param float mag_inc:
+#             Increment of the completeness magnitude (rendered 0.1)
+# 
+#         :returns:
+#            Three-dimensional spatial grid of observed rates (or two dimensional
+#            if only one depth layer is considered)
+# 
+#         '''
+#         x_bins = np.arange(self.grid_limits['xmin'],
+#                            self.grid_limits['xmax'],
+#                            self.grid_limits['xspc'])
+#         if x_bins[-1] < self.grid_limits['xmax']:
+#             x_bins = np.hstack([x_bins, x_bins[-1] + self.grid_limits['xspc']])
+# 
+#         y_bins = np.arange(self.grid_limits['ymin'],
+#                            self.grid_limits['ymax'],
+#                            self.grid_limits['yspc'])
+#         if y_bins[-1] < self.grid_limits['ymax']:
+#             y_bins = np.hstack([y_bins, y_bins[-1] + self.grid_limits['yspc']])
+# 
+#         z_bins = np.arange(self.grid_limits['zmin'],
+#                            self.grid_limits['zmax'] + self.grid_limits['zspc'],
+#                            self.grid_limits['zspc'])
+# 
+#         if z_bins[-1] < self.grid_limits['zmax']:
+#             z_bins = np.hstack([z_bins, z_bins[-1] + self.grid_limits['zspc']])
+# 
+#         # Define centre points of grid cells
+#         gridx, gridy = np.meshgrid((x_bins[1:] + x_bins[:-1]) / 2.,
+#                                    (y_bins[1:] + y_bins[:-1]) / 2.)
+# 
+#         n_x, n_y = np.shape(gridx)
+#         gridx = np.reshape(gridx, [n_x * n_y, 1])
+#         gridy = np.reshape(np.flipud(gridy), [n_x * n_y, 1])
+# 
+#         # Only one depth range
+#         idx = np.logical_and(catalogue.data['depth'] >= z_bins[0],
+#                              catalogue.data['depth'] < z_bins[1])
+#         mid_depth = (z_bins[0] + z_bins[1]) / 2.
+# 
+#         data_grid = np.column_stack([
+#             gridx,
+#             gridy,
+#             mid_depth * np.ones(n_x * n_y, dtype=float),
+#             self.create_2D_grid_simple(catalogue.data['longitude'][idx],
+#                                        catalogue.data['latitude'][idx],
+#                                        catalogue.data['year'][idx],
+#                                        catalogue.data['magnitude'][idx],
+#                                        completeness_table,
+#                                        t_f,
+#                                        mag_inc)])
+# 
+#         if len(z_bins) < 3:
+#             # Only one depth range
+#             self.data = data_grid
+#             return
+# 
+#         # Multiple depth layers - append to grid
+#         for iloc in range(1, len(z_bins) - 1):
+#             idx = np.logical_and(catalogue.data['depth'] >= z_bins[iloc],
+#                                  catalogue.data['depth'] < z_bins[iloc + 1])
+#             mid_depth = (z_bins[iloc] + z_bins[iloc + 1]) / 2.
+# 
+#             temp_grid = np.column_stack([
+#                 gridx,
+#                 gridy,
+#                 mid_depth * np.ones(n_x * n_y, dtype=float),
+#                 self.create_2D_grid_simple(catalogue.data['longitude'][idx],
+#                                            catalogue.data['latitude'][idx],
+#                                            catalogue.data['year'][idx],
+#                                            catalogue.data['magnitude'][idx],
+#                                            completeness_table,
+#                                            t_f,
+#                                            mag_inc)])
+# 
+#             data_grid = np.vstack([data_grid, temp_grid])
+#         self.data = data_grid
 
     def write_to_csv(self, filename):
         '''
