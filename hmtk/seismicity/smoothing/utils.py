@@ -51,9 +51,11 @@
 Module :mod: hmtk.seismicity.smoothing.utils implements utility functions for
 smoothed seismicity analysis
 '''
+import collections
 
 import numpy as np
-
+from openquake.hazardlib.geo.point import Point
+from openquake.hazardlib.geo.polygon import Polygon
 
 def hermann_adjustment_factors(bval, min_mag, mag_inc):
     '''
@@ -202,3 +204,123 @@ def get_even_magnitude_completeness(completeness_table,
     #completeness_table = np.vstack([completeness_table,
     #    np.array([[cyear[-1], cmag[-1]]])])
     return completeness_table, magnitude_increment
+
+
+class Grid(collections.OrderedDict):
+    @classmethod
+    def make_from_list(cls, grid_limits):
+        new = cls()
+        new.update({'xmin': grid_limits[0],
+                    'xmax': grid_limits[1],
+                    'xspc': grid_limits[2],
+                    'ymin': grid_limits[3],
+                    'ymax': grid_limits[4],
+                    'yspc': grid_limits[5],
+                    'zmin': grid_limits[6],
+                    'zmax': grid_limits[7],
+                    'zspc': grid_limits[8]})
+        return new
+
+    @classmethod
+    def make_from_catalogue(cls, catalogue, spacing, dilate):
+        '''
+        Defines the grid on the basis of the catalogue
+        '''
+        new = cls()
+        cat_bbox = get_catalogue_bounding_polygon(catalogue)
+
+        if dilate > 0:
+            cat_bbox = cat_bbox.dilate(dilate)
+
+        # Define Grid spacing
+        new.update({'xmin': np.min(cat_bbox.lons),
+                    'xmax': np.max(cat_bbox.lons),
+                    'xspc': spacing,
+                    'ymin': np.min(cat_bbox.lats),
+                    'ymax': np.max(cat_bbox.lats),
+                    'yspc': spacing,
+                    'zmin': 0.,
+                    'zmax': np.max(catalogue.data['depth']),
+                    'zspc': np.max(catalogue.data['depth'])})
+
+        if new['zmin'] == new['zmax'] == new['zspc'] == 0:
+            new['zmax'] = new['zspc'] = 1
+
+        return new
+
+    def as_list(self):
+        return [self['xmin'], self['xmax'], self['xspc'],
+                self['ymin'], self['ymax'], self['yspc'],
+                self['zmin'], self['zmax'], self['zspc']]
+
+    def as_polygon(self):
+        return Polygon([
+            Point(self['xmin'], self['ymax']),
+            Point(self['xmax'], self['ymax']),
+            Point(self['xmax'], self['ymin']),
+            Point(self['xmin'], self['ymin'])])
+
+    def dilate(self, width):
+        polygon = self.as_polygon().dilate(width)
+
+        self.update({'xmin': np.min(polygon.lons),
+                     'xmax': np.max(polygon.lons),
+                     'ymin': np.min(polygon.lats),
+                     'ymax': np.max(polygon.lats)})
+        return self
+
+
+def get_completeness_adjustment(mag, year, mmin, completeness_year, t_f, mag_inc=0.1):
+    '''
+    If the magnitude is greater than the minimum in the completeness table
+    and the year is greater than the corresponding completeness year then
+    return the Weichert factor
+
+    :param float mag:
+        Magnitude of an earthquake
+
+    :param float year:
+        Year of earthquake
+
+    :param np.ndarray completeness_table:
+        Completeness table
+
+    :param float mag_inc:
+        Magnitude increment
+
+    :param float t_f:
+        Weichert adjustment factor
+
+    :returns:
+        Weichert adjustment factor is event is in complete part of catalogue
+        (0.0 otherwise)
+    '''
+    if len(completeness_year) == 1:
+        if mag >= mmin:
+            # No adjustment needed - event weight == 1
+            return 1.0
+        else:
+            # Event should not be counted
+            return False
+
+    kval = int(((mag - mmin) / mag_inc)) + 1
+
+    if (kval >= 1) and (year >= completeness_year[kval - 1]):
+        return t_f
+    else:
+        return False
+
+
+def get_catalogue_bounding_polygon(catalogue):
+    '''
+    Returns a polygon containing the bounding box of the catalogue
+    '''
+    upper_lon = np.max(catalogue.data['longitude'])
+    upper_lat = np.max(catalogue.data['latitude'])
+    lower_lon = np.min(catalogue.data['longitude'])
+    lower_lat = np.min(catalogue.data['latitude'])
+
+    return Polygon([Point(lower_lon, upper_lat), Point(upper_lon, upper_lat),
+                    Point(upper_lon, lower_lat), Point(lower_lon, lower_lat)])
+
+
