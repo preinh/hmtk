@@ -54,6 +54,8 @@ class for the smoothing kernels
 import abc
 
 
+
+
 class BaseSmoothingKernel(object):
     '''
     Abstract Base Class to smooth a grid according the sets of
@@ -72,3 +74,20 @@ class BaseSmoothingKernel(object):
         :param dict config:
             Algorithm configuration parameters
         '''
+
+
+class BaseSimpleKernel(object):
+    
+    __metaclass__ = abc.ABCMeta
+    
+    @abc.abstractmethod
+    def value(self, radius, parameters):
+        '''
+        Returns the kernel value
+        :param numpy.ndarray radius:
+            distance from each grid poit (ix, iy) 
+            to center of kernel in each earthquake (lx, ly)
+        :param parameters:
+            gausian function parameters
+        '''
+    
