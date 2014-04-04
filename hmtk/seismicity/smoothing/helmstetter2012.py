@@ -16,6 +16,7 @@ class smoothing(object):
     
     def __init__(self, catalogue, grid_limits):
         self.catalogue = catalogue
+        self.grid_limits = grid_limits
         self.r, self.grid_shape = self._create_grid()
 
 
@@ -184,8 +185,8 @@ class smoothing(object):
         
 
     def rate_model(self, r, t, r_min, a, k):
+
         self.optimize_catalogue_bandwidths(k=k, a=a)
-        
         rates = self.rate(r, t, r_min=r_min, k=k, a=a)
 
         return rates
@@ -225,14 +226,14 @@ if __name__ == '__main__':
     catalogue = parser.read_file()
     catalogue.sort_catalogue_chronologically()
     
-
+    #print catalogue
     # create grid specifications
     #[xmin, xmax, spcx, ymin, ymax, spcy, zmin, spcz]
     grid_limits = utils.Grid.make_from_list(
                         [ -80, -30, 1, -37, 14, 1, 0, 30, 10])
 
     # create smooth class 
-    s = smoothing(catalogue=catalogue, grid_limits)
+    s = smoothing(catalogue, grid_limits)
     #s.compute_bandwidths()
     # grid space
     #r, grid_shape = s._create_grid(grid_limits)
@@ -240,9 +241,11 @@ if __name__ == '__main__':
     #r = np.array([ [-46, -26], [-50, -20], [-40, -10] ])
     t = np.array([ dt.date(2010, 01, 01) ])
     
-    s.optimize_catalogue_bandwidths(k=3, a=20)
-    rates = s.rate(r, t, r_min=0.001, k=4, a=200)
+    print s.rate_model(s.r, t, r_min=0.01, k=4, a=100)
 
+    #s.optimize_catalogue_bandwidths(k=3, a=20)
+#    rates = s.rate(r, t, r_min=0.001, k=4, a=200)
+    
 #     pl.imshow(rates.reshape(grid_shape), origin='lower')
 #     pl.colorbar()
 #     pl.show()    
