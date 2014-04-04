@@ -11,6 +11,6 @@ class Kernel(BaseSimpleKernel):
         return np.sqrt( 2 * np.pi ) * d 
 
     def value(self, r, p):
-        return np.exp( -r**2 / (2.0 * p[0]**2) ) \
-                * self._normalization_factor(p[0])
+        return np.exp( -r*r / (2.0 * p*p) ) \
+                * self._normalization_factor(p)
 
