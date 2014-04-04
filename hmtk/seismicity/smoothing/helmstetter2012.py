@@ -7,14 +7,17 @@ import numpy as np
 
 from scipy import spatial, optimize
 
+from hmtk.seismicity.smoothing import utils
 from hmtk.seismicity.smoothing.kernels import gaussian
 from hmtk.seismicity.utils import haversine
 from matplotlib import pylab as pl
 
 class smoothing(object):
     
-    def __init__(self, catalogue):
+    def __init__(self, catalogue, grid_limits):
         self.catalogue = catalogue
+        self.r, self.grid_shape = self._create_grid()
+
 
 
     
@@ -38,139 +41,172 @@ class smoothing(object):
         return h, d
 
 
-    def process_catalog_bandwidths(self, k, a, plotting = False):
+    def optimize_catalogue_bandwidths(self, k, a, plotting = False):
 
         catalogue = self.catalogue
 
         #given reference time
         reference_date = dt.date(catalogue.end_year,12,31)
         
-        #given reference time
-
         # get time (date)  vector
         _y = catalogue.data['year']
         _m = catalogue.data['month']
         _d = catalogue.data['day']
         T = np.array([ dt.date(y, m, d) for (y, m, d) in zip(_y, _m, _d) ])
-        
-        # just past events from _date accounts
-        #_idx = T <= reference_date
-#        _idx = T <= reference_date
-#        T = T[_idx]
 
         # select lats and lons
         lx = catalogue.data['longitude']#[_idx]
         ly = catalogue.data['latitude']#[_idx]
         D = haversine(lx, ly, lx, ly)
         
-        h = []
-        d = []
+        h, d = [], []
+        
+        #for each earthquake i
         for i, v in enumerate(zip(D, T)):
-            distances, t0 = v[0], v[1]
+            # variable init
+            distances, origin_time = v[0], v[1]
 
-            #print t0
-            # min dist correction
+            # minimum distance correction
             _i = distances <= 1.0
             distances[_i] = 1.0
 
-            days = np.array([ (t0 - t).days for t in T ])
-            # filter only eq before t0
-
-# may it don't be necessary?!
-#             _i = days >= 0
-#             days = np.abs(days[_i])
-#             distances = distances[_i]
-        
-            #escape for the 
-#             if len(days) <= k: 
-#                 d.append(1)
-#                 h.append(1)
-#                 continue
+            # get 'days' timedelta
+            # TODO: ckeck in the future if dond be exclude 'past' events 
+            days = np.array([ (origin_time - t).days for t in T ])
             
-            X = np.array(zip(days.ravel(), distances.ravel()))
-            _X = X[1:]
+            # condense vector [t, r], but exclude exclude the calculation point
+            X = np.array(zip(days.ravel(), distances.ravel()))[1:]
 
-#             if last_X.all() == X.all():
-#                 print 'é igual'
-#             else:
-#                 print 'não é igual'
-#                 last_X = _X
-            tree = spatial.KDTree(_X)
-            hi, di = self.coupled_nearest_neighbor(_X, a, k, tree)
-            #print hi, di
-            #break
+            # compute nearest neighbor tree
+            tree = spatial.KDTree(X)
+            
+            # compute each [h, d] by CNN 
+            hi, di = self.coupled_nearest_neighbor(X, a, k, tree)
         
-            if plotting:
-                #pl.axis('equal')
-                pl.scatter(days, distances, s=50, c='y', marker='x', alpha=0.7)
-                pl.ylim(ymin=0)
-                pl.axvline(hi)
-                pl.axhline(di)
-                pl.show()
+#             if plotting:
+#                 pl.scatter(days, distances, s=50, c='y', marker='x', alpha=0.7)
+#                 pl.ylim(ymin=0)
+#                 pl.axvline(hi)
+#                 pl.axhline(di)
+#                 pl.show()
 
             d.append(di)
             h.append(hi)
-            #print i, eq_d, eq_t
-            #print h_i, d_i, "sum:", h_i + a*d_i
-        h = np.array(h)
-        d = np.array(d)
 
-        self.catalogue.data['h'] = h
-        self.catalogue.data['d'] = d
-        #return h, d
-
-
-
-
+        # after process each one, 
+        # store optimized h and d for given catalog
+        self.catalogue.data['h'] = np.array(h)
+        self.catalogue.data['d'] = np.array(d)
 
 
     
     def pilot_estimator(self, p):
-        h0 = p[0]
-        d0 = p[1]
-    
-    
-    def rate(self, r, t, r_min, k, a, catalogue):
-        
-        # compute h, d 
-        #h, d = self.compute_bandwidths()
-        
-        # may it could be computed once ?!
-        #catalogue.data['h'] = self.h
-        #catalogue.data['d'] = d
-        
-        
-        
-        # using only catalog events on t_i < t # past eq
-        #     compute time_kernel on t
-        #     compute distance_kernel on r
-        #     compute normalization_factor
-        #     sum their product
-
-        # sum r_min
-        # return
-        
+        h0, d0 = p[0], p[1]
         pass
-        
-        
-        
+
     
-    def rate_model(self, r, t, p):
+    def rate(self, r, t, r_min, k, a):
+        # get catalogue
+        catalogue = self.catalogue
+        
+        # get time (date)  vector
+        _y = catalogue.data['year']
+        _m = catalogue.data['month']
+        _d = catalogue.data['day']
+        T = np.array([ dt.date(y, m, d) for (y, m, d) in zip(_y, _m, _d) ])
+        
+        # compute time differences from t to each earthquake i on catalogue
+        # select days
+        # TODO: generalize for vector entry t
+        days = np.array([ (t[0] - _t).days for _t in T ])
+        # filter catalog t_i < t 
+        # only past events
+        _i = days <= 0
+        days = days[_i]
 
-        r_min, k, a = p[0], p[1], p[2]
+        # filter lats and lons
+        lx = catalogue.data['longitude'][_i]
+        ly = catalogue.data['latitude'][_i]
         
-        h, d = np.ones(len(r)), np.ones(len(r))
+        # compute distance from r to each earthquake i on catalogue
+        distances = haversine(r[:,0], r[:,1], lx, ly)
+
+        # compute hi, di
+        #self.optimize_catalogue_bandwidths(k, a)
         
+        # get optimized h, d
+        h = self.catalogue.data['h'][_i]
+        d = self.catalogue.data['d'][_i]
+#         h = np.ones(len(lx))
+#         d = np.ones(len(lx))
+        
+        # compute kernels and normalization factor
         time_kernel = gaussian.Kernel()  
-        time_kernel.value(t, h)
+        K1 = time_kernel.value(days, h)
+        #print days.shape, K1.shape
+        
         distance_kernel = gaussian.Kernel()
-        distance_kernel.value(r, d)
+        K2 = distance_kernel.value(distances, d)
+        #print distances.shape, K2.shape
 
-        normalization = 2 / (h * d * d)
-        _rate = r_min + sum( normalization * \
-                            time_kernel * \
-                            distance_kernel )
-        return _rate
+        norm = 2. / (h * d * d)
+        #print norm.shape
+        #print K1, K2, norm
+        # compute rate
+        rates = [ r_min + sum(norm * K1 * K2) for K2 in K2 ] 
+        return np.array(rates)
+
+    def _create_grid(self, use3d=False):
+        l = self.grid_limits
+
+        dx = l['xspc']
+        dy = l['yspc']
+        dz = l['zspc']
+        
+        x = np.arange(l['xmin'] + dx/2., l['xmax'] + dx, dx) 
+        y = np.arange(l['ymin'] + dy/2., l['ymax'] + dy, dy) 
+        z = np.arange(l['zmin'] + dz/2., l['zmax'] + dz, dz)
+        
+        if not use3d:
+            #spacement = [dx, dy]
+            _shape = (len(x), len(y))
+            xx, yy= np.meshgrid(x, y)
+            x, y = xx.flatten(), yy.flatten()
+            cells = np.array(zip(x,y))
+        else:
+            #spacement = [dx, dy, dz]
+            _shape = (len(x), len(y), len(z))
+            xx, yy, zz = np.meshgrid(x, y, z)
+            x, y, z = xx.flatten(), yy.flatten(), zz.flatten()
+            cells = np.array(zip(x,y,z))
+
+        return cells, _shape #, spacement
+        
+
+    def rate_model(self, r, t, r_min, a, k):
+        self.optimize_catalogue_bandwidths(k=k, a=a)
+        
+        rates = self.rate(r, t, r_min=r_min, k=k, a=a)
+
+        return rates
+    
+    
+#     def rate_model(self, r, t, p):
+# 
+#         r_min, k, a = p[0], p[1], p[2]
+#         
+#         h, d = np.ones(), np.ones()
+#         
+#         time_kernel = gaussian.Kernel()  
+#         time_kernel.value(t, h)
+#         distance_kernel = gaussian.Kernel()
+#         distance_kernel.value(r, d)
+# 
+#         normalization = 2 / (h * d * d)
+#         _rate = r_min + sum( normalization * \
+#                             time_kernel * \
+#                             distance_kernel )
+#         return _rate
 
 
 
@@ -184,14 +220,34 @@ if __name__ == '__main__':
     
     _CATALOGUE = os.path.join(BASE_PATH,TEST_CATALOGUE)
     
-    # catalogue
+    # get catalogue
     parser = CsvCatalogueParser(_CATALOGUE)
     catalogue = parser.read_file()
-    
     catalogue.sort_catalogue_chronologically()
     
-    s = smoothing(catalogue=catalogue)
-    s.process_catalog_bandwidths(k=4, a=200)
+
+    # create grid specifications
+    #[xmin, xmax, spcx, ymin, ymax, spcy, zmin, spcz]
+    grid_limits = utils.Grid.make_from_list(
+                        [ -80, -30, 1, -37, 14, 1, 0, 30, 10])
+
+    # create smooth class 
+    s = smoothing(catalogue=catalogue, grid_limits)
     #s.compute_bandwidths()
-    print s.catalogue.data
+    # grid space
+    #r, grid_shape = s._create_grid(grid_limits)
+
+    #r = np.array([ [-46, -26], [-50, -20], [-40, -10] ])
+    t = np.array([ dt.date(2010, 01, 01) ])
+    
+    s.optimize_catalogue_bandwidths(k=3, a=20)
+    rates = s.rate(r, t, r_min=0.001, k=4, a=200)
+
+#     pl.imshow(rates.reshape(grid_shape), origin='lower')
+#     pl.colorbar()
+#     pl.show()    
+    # make grid ?!!?
+    
+    #r = compute_rates()
+    #print s.catalogue.data
     #s.rate(1, 3, p=[2,3])
