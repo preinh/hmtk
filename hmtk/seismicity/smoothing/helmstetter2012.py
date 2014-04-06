@@ -3,6 +3,7 @@
 #from sklearn import neighbors as nn
 
 import datetime as dt
+import copy
 import numpy as np
 
 from scipy import spatial, optimize
@@ -12,15 +13,67 @@ from hmtk.seismicity.smoothing.kernels import gaussian
 from hmtk.seismicity.utils import haversine
 from matplotlib import pylab as pl
 
+from hmtk.plotting.mapping import HMTKBaseMap 
+
 class smoothing(object):
     
-    def __init__(self, catalogue, grid_limits):
+    def __init__(self, catalogue, grid_limits, completeness_table, 
+                 catalogue_year_divisor = 2000,
+                 target_minimum_magnitude = 4.0):
         self.catalogue = catalogue
+
+        # divide into learning catalog
+        learning_catalogue = copy.deepcopy(catalogue)
+        learn_condition = catalogue.data['year'] <= catalogue_year_divisor
+        learning_catalogue.select_catalogue_events( learn_condition )
+        self.learning_catalogue = learning_catalogue
+
+        # and target catalog with magnitude threshold
+        target_catalogue = copy.deepcopy(catalogue)
+        target_condition = catalogue.data['year'] > catalogue_year_divisor
+        target_catalogue.select_catalogue_events( target_condition )
+        magnitude_condition = target_catalogue.data['magnitude'] >= target_minimum_magnitude
+        target_catalogue.select_catalogue_events( magnitude_condition )
+        self.target_catalogue = target_catalogue
+
+        # TODO: decluster target_catalogue
+        
+        # grid
         self.grid_limits = grid_limits
+        # r = grid [[lon, lat]]
         self.r, self.grid_shape = self._create_grid()
+        
+        # catalog_incompleteness
+        self.completeness_table = completeness_table
+        # purge 'UNcomplete' events
+        # add a weight column to each eq on catalog
+        self.estimate_catalogue_incompleteness_weight(learning_catalogue)
+        
+        # plot catalogues
+        #print target_catalogue.get_number_events()
+#         map_config = {'min_lon': -80,
+#                       'max_lon': -30,
+#                       'min_lat': -37,
+#                       'max_lat': +14,
+#                       }
+#         m2 = HMTKBaseMap(config=map_config, title="catalogs", dpi=90)
+#         m2.add_catalogue(learning_catalogue)
+#         m1 = HMTKBaseMap(config=map_config, title="catalogs", dpi=90)
+#         m1.add_catalogue(target_catalogue)
+        
+        
+        
+        # h, d  =  optimize/learn 
+        
+        # decluster target
 
+        # stationary rates
+        # observed rates
 
-
+        # likelihood
+        
+        # gain
+    
     
     def _cnn_model(self, p, X, k, a, tree):
         return p[0] + a*p[1]
@@ -98,6 +151,43 @@ class smoothing(object):
         # store optimized h and d for given catalog
         self.catalogue.data['h'] = np.array(h)
         self.catalogue.data['d'] = np.array(d)
+
+
+
+    def estimate_catalogue_incompleteness_weight(self, catalogue):
+        """
+        :param r: numpy.ndarray space of earthquake coordinates [x, y], [x, y, z]
+        :type r: numpy.ndarray
+        :param t: datetime.datetime time of earthquake coordinate
+        :type t: datetime.datetime
+        :param b_value: float b_value
+        :type b_value: flaot
+        :param md: float minimum catalog magnitude
+        :type md: float
+
+        :returns: weight for each earthquake kernel, on (r, t)  
+                 (more for ancient uncompleted space_time)
+        :rtype: numpy.array
+        """
+        b = 1.0
+        _c = completeness(self.completeness_table)
+        #catalogue.data['mc'] = mc
+        
+        X,Y,Z,M,T = catalogue_to_XYZMT(catalogue)
+        
+        md = min(M)
+        r = np.array(zip(X,Y))
+        #print "completenesss:", len(X)
+        mc = _c.magnitude_completeness(r, T)
+        catalogue.select_catalogue_events( (mc > 0) )
+
+        w = 10.0**(b*mc - md)
+        #w = w [ w >= 1]
+        #print w
+        catalogue.data['w'] = w
+        return w #print w
+        
+
 
 
     
@@ -191,6 +281,7 @@ class smoothing(object):
 
         return rates
     
+  
     
 #     def rate_model(self, r, t, p):
 # 
@@ -209,7 +300,52 @@ class smoothing(object):
 #                             distance_kernel )
 #         return _rate
 
+class completeness(object):
+    '''
+    Class to handle magnitude completeness for wheight correction
 
+
+    :attribute completeness_table:
+        [[year magnitude]
+         [year magnitude]...]
+    '''
+    def __init__(self, completeness_table):
+        self.completeness_table = completeness_table
+        
+        
+    def magnitude_completeness(self, r, t):
+        """
+        :param r: numpy.ndarray of space coordinates [x, y], [x, y, z]
+        :type r: numpy.ndarray
+        :param t: datetime.datetime time coordinate
+        :type t: datetime.datetime
+
+        :returns: magnitude completeness value or 0
+        :rtype: numpy.array
+        """
+        c = self.completeness_table
+        y = c[:,0]
+        m = c[:,1]
+        #print t, y, m
+        years = [ min( y[ (y >= t.year) ] ) if len( y[ (y >= t.year) ] ) > 0 else 0 for t in t ]
+        mc = [ np.array([0]) if _i == 0 else m[(y == _i)] for _i in years ]
+        
+        return np.array(mc).T[0]
+        
+
+def catalogue_to_XYZMT(catalogue):
+    c = catalogue
+    
+    X = np.array(c.data['longitude'])
+    Y = np.array(c.data['latitude'])
+    Z = np.array(c.data['depth'])
+    M = np.array(c.data['magnitude'])
+    T = np.array([ dt.date(e[0], e[1], e[2]) \
+                  for e in zip(c.data['year'], 
+                               c.data['month'], 
+                               c.data['day']) ])
+
+    return X, Y, Z, M, T
 
 if __name__ == '__main__':
     from hmtk.parsers.catalogue.csv_catalogue_parser import CsvCatalogueParser
@@ -225,6 +361,32 @@ if __name__ == '__main__':
     parser = CsvCatalogueParser(_CATALOGUE)
     catalogue = parser.read_file()
     catalogue.sort_catalogue_chronologically()
+
+    # Time-varying completeness
+    comp_table = np.array([[1990., 3.0],
+                           [1980., 3.5],
+                           [1970., 4.5],
+                           [1960., 5.0],
+                           [1900., 6.5],
+                           [1800., 7.0]])
+    
+#    mag_completeness = completeness(comp_table)
+    t = np.array([ dt.date(1991, 01, 01),
+                   dt.date(1990, 01, 01) ,
+                   dt.date(1979, 01, 01)  ])
+
+#     c = comp_table
+#     y = c[:,0]
+#     m = c[:,1]
+#     
+#     years = [ min( y[ (y >= t.year) ] ) if len( y[ (y >= t.year) ] ) > 0 else 0 for t in t ]
+#     mc = [ np.array([0]) if _i == 0 else m[(y == _i)] for _i in years ]
+#     
+#     mc = np.array(mc).T
+#     
+    
+#    print mag_completeness.magnitude(r=[0,0], t=t)
+#    exit()
     
     #print catalogue
     # create grid specifications
@@ -233,14 +395,16 @@ if __name__ == '__main__':
                         [ -80, -30, 1, -37, 14, 1, 0, 30, 10])
 
     # create smooth class 
-    s = smoothing(catalogue, grid_limits)
+    s = smoothing(catalogue, 
+                  grid_limits,
+                  comp_table)
     #s.compute_bandwidths()
     # grid space
     #r, grid_shape = s._create_grid(grid_limits)
 
     #r = np.array([ [-46, -26], [-50, -20], [-40, -10] ])
-    t = np.array([ dt.date(2010, 01, 01) ])
-    
+    #t = np.array([ dt.date(2010, 01, 01) ])
+    exit()
     print s.rate_model(s.r, t, r_min=0.01, k=4, a=100)
 
     #s.optimize_catalogue_bandwidths(k=3, a=20)

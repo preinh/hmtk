@@ -107,6 +107,9 @@ class Catalogue(object):
     def get_number_events(self):
         return len(self.data['magnitude'])
 
+    def count(self):
+        return len(self.data['magnitude'])
+
     def add_event(self):
         raise NotImplementedError
 
