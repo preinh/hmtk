@@ -17,9 +17,13 @@ from hmtk.plotting.mapping import HMTKBaseMap
 
 class smoothing(object):
     
-    def __init__(self, catalogue, grid_limits, completeness_table, 
+    def __init__(self, catalogue, 
+                 grid_limits, 
+                 completeness_table,
+                 stationary_time_step_in_days = 100,
                  catalogue_year_divisor = 2000,
                  target_minimum_magnitude = 4.0):
+
         self.catalogue = catalogue
 
         # divide into learning catalog
@@ -37,12 +41,8 @@ class smoothing(object):
         self.target_catalogue = target_catalogue
 
         # TODO: decluster target_catalogue
-        
-        # grid
-        self.grid_limits = grid_limits
-        # r = grid [[lon, lat]]
-        self.r, self.grid_shape = self._create_grid()
-        
+        # decluster target
+
         # catalog_incompleteness
         self.completeness_table = completeness_table
         # purge 'UNcomplete' events
@@ -51,24 +51,48 @@ class smoothing(object):
         
         # plot catalogues
         #print target_catalogue.get_number_events()
-#         map_config = {'min_lon': -80,
-#                       'max_lon': -30,
-#                       'min_lat': -37,
-#                       'max_lat': +14,
-#                       }
+        map_config = {'min_lon': -80,
+                      'max_lon': -30,
+                      'min_lat': -37,
+                      'max_lat': +14,
+                      }
 #         m2 = HMTKBaseMap(config=map_config, title="catalogs", dpi=90)
 #         m2.add_catalogue(learning_catalogue)
 #         m1 = HMTKBaseMap(config=map_config, title="catalogs", dpi=90)
 #         m1.add_catalogue(target_catalogue)
         
         
-        
-        # h, d  =  optimize/learn 
-        
-        # decluster target
+        # grid
+        self.grid_limits = grid_limits
+        # r = grid [[lon, lat]]
+        self.r, self.grid_shape = self._create_grid()
+        #print self.r.shape
 
-        # stationary rates
-        # observed rates
+
+# TODO temporary
+# estimation of time integrator...
+        _y = np.arange(2000, 1959, -1)
+        _m = np.arange(12,0,-6)
+        #print _m
+        t = []
+        for y in _y:
+            for m in _m:
+                t.append(dt.date(y, m, 01))
+        #exit()
+        # 90 days vector ?!?! 
+        #t = np.array([ dt.date(year, 01, 01) for year in _y ])
+        self.t = np.array(t)
+#### temporary
+
+        
+        # h, d  =  optimize/learn (ok)
+        
+        # stationary rates (ok ?!) 
+#             _y = np.arange(2000, 1959, -1)
+#             t = np.array([ dt.date(year, 01, 01) for year in _y ])
+#             print t
+
+        # observed rates (ok?!)
 
         # likelihood
         
@@ -79,12 +103,14 @@ class smoothing(object):
         return p[0] + a*p[1]
     
     def _cnn_time_constraint(self, p, X, k, a, tree):
-        _d, _i = tree.query([0,0], k)
-        return p[0] - max(  X[_i, 0]  )
+        #print tree, k
+        _d, _i = tree.query([0., 0.], k=np.round(k))
+        return p[0] - np.max(  X[_i, 0]  )
     
     def _cnn_space_constraint(self, p, X, k, a, tree):
-        _d, _i = tree.query([0,0], k)
-        return p[1] - max(  X[_i, 1]  )
+        _d, _i = tree.query([0.,0.], k=np.round(k))
+        return p[1] - np.max(  X[_i, 1]  )
+
     
     def coupled_nearest_neighbor(self, X, k, a, tree):
         h, d = optimize.fmin_slsqp(self._cnn_model, [10., 10.], 
@@ -95,12 +121,13 @@ class smoothing(object):
         return h, d
 
 
-    def optimize_catalogue_bandwidths(self, k, a, plotting = False):
-
-        catalogue = self.catalogue
+    def optimize_catalogue_bandwidths(self, k, a, plotting=False):
+        
+        # optimize only LEARNING catalogue
+        catalogue = self.learning_catalogue
 
         #given reference time
-        reference_date = dt.date(catalogue.end_year,12,31)
+        #reference_date = dt.date(catalogue.end_year,12,31)
         
         # get time (date)  vector
         _y = catalogue.data['year']
@@ -135,7 +162,7 @@ class smoothing(object):
             tree = spatial.KDTree(X)
             
             # compute each [h, d] by CNN 
-            hi, di = self.coupled_nearest_neighbor(X, a, k, tree)
+            hi, di = self.coupled_nearest_neighbor(X, k, a, tree)
         
 #             if plotting:
 #                 pl.scatter(days, distances, s=50, c='y', marker='x', alpha=0.7)
@@ -149,8 +176,8 @@ class smoothing(object):
 
         # after process each one, 
         # store optimized h and d for given catalog
-        self.catalogue.data['h'] = np.array(h)
-        self.catalogue.data['d'] = np.array(d)
+        catalogue.data['h'] = np.array(h)
+        catalogue.data['d'] = np.array(d)
 
 
 
@@ -187,9 +214,6 @@ class smoothing(object):
         catalogue.data['w'] = w
         return w #print w
         
-
-
-
     
     def pilot_estimator(self, p):
         h0, d0 = p[0], p[1]
@@ -197,8 +221,8 @@ class smoothing(object):
 
     
     def rate(self, r, t, r_min, k, a):
-        # get catalogue
-        catalogue = self.catalogue
+        # get LEARNING catalogue
+        catalogue = self.learning_catalogue
         
         # get time (date)  vector
         _y = catalogue.data['year']
@@ -209,7 +233,7 @@ class smoothing(object):
         # compute time differences from t to each earthquake i on catalogue
         # select days
         # TODO: generalize for vector entry t
-        days = np.array([ (t[0] - _t).days for _t in T ])
+        days = np.array([ (t - _t).days for _t in T ])
         # filter catalog t_i < t 
         # only past events
         _i = days <= 0
@@ -226,10 +250,12 @@ class smoothing(object):
         #self.optimize_catalogue_bandwidths(k, a)
         
         # get optimized h, d
-        h = self.catalogue.data['h'][_i]
-        d = self.catalogue.data['d'][_i]
+        h = catalogue.data['h'][_i]
+        d = catalogue.data['d'][_i]
 #         h = np.ones(len(lx))
 #         d = np.ones(len(lx))
+        
+        w = catalogue.data['w'][_i]
         
         # compute kernels and normalization factor
         time_kernel = gaussian.Kernel()  
@@ -240,12 +266,12 @@ class smoothing(object):
         K2 = distance_kernel.value(distances, d)
         #print distances.shape, K2.shape
 
-        norm = 2. / (h * d * d)
+        norm = (2. * w ) / (h * d * d)
         #print norm.shape
         #print K1, K2, norm
         # compute rate
         rates = [ r_min + sum(norm * K1 * K2) for K2 in K2 ] 
-        return np.array(rates)
+        return rates
 
     def _create_grid(self, use3d=False):
         l = self.grid_limits
@@ -254,9 +280,12 @@ class smoothing(object):
         dy = l['yspc']
         dz = l['zspc']
         
-        x = np.arange(l['xmin'] + dx/2., l['xmax'] + dx, dx) 
-        y = np.arange(l['ymin'] + dy/2., l['ymax'] + dy, dy) 
-        z = np.arange(l['zmin'] + dz/2., l['zmax'] + dz, dz)
+#         x = np.arange(l['xmin'] + dx/2., l['xmax'] + dx, dx) 
+#         y = np.arange(l['ymin'] + dy/2., l['ymax'] + dy, dy) 
+#         z = np.arange(l['zmin'] + dz/2., l['zmax'] + dz, dz)
+        x = np.arange(l['xmin'], l['xmax'], dx) 
+        y = np.arange(l['ymin'], l['ymax'], dy) 
+        z = np.arange(l['zmin'], l['zmax'], dz)
         
         if not use3d:
             #spacement = [dx, dy]
@@ -274,15 +303,116 @@ class smoothing(object):
         return cells, _shape #, spacement
         
 
-    def rate_model(self, r, t, r_min, a, k):
+    def stationary_rate_model(self, r, t, r_min, k, a, normalized=True):
 
         self.optimize_catalogue_bandwidths(k=k, a=a)
-        rates = self.rate(r, t, r_min=r_min, k=k, a=a)
+        rates = [ self.rate(self.r, t, r_min=r_min, k=k, a=a) for t in t ]
+
+        rates = np.array(rates).T # one timeseries array for each grid point
+        
+#         # plot ?!
+#         for _y in rates:
+#             pl.scatter(t, _y)
+#             pl.axhline(np.median(_y))
+#             pl.show()
+    
+        # get de median of rates distribution
+        rates = np.array([ np.median(r) for r in rates ])
+
+        if normalized:
+            nt = s.target_catalogue.get_number_events()
+            rates = (rates * nt) / sum(rates)
 
         return rates
+        
     
-  
+    def observed_number_of_events(self, plot=False):
+        c = self.target_catalogue
+        x = c.data['longitude']
+        y = c.data['latitude']
+
+        l = self.grid_limits
+        dx = l['xspc']
+        dy = l['yspc']
+        
+        x_bin = np.arange(l['xmin'], l['xmax'] + dx, dx) 
+        y_bin = np.arange(l['ymin'], l['ymax'] + dy, dy) 
     
+#         nx = ( l['xmax'] - l['xmin'] ) / l['xspc']
+#         ny = ( l['ymax'] - l['ymin'] ) / l['yspc']
+#         print (nx, ny)
+        heatmap, xedges, yedges = \
+            np.histogram2d(x, y, bins=[x_bin, y_bin] )
+
+#         print heatmap
+#         print heatmap.shape
+#         print xedges
+#         print yedges
+        if plot:
+#             extent = [xedges[0] - dx/2., xedges[-1] - dx/2., 
+#                       yedges[0] - dy/2., yedges[-1] - dy/2.]
+            extent = [xedges[0], xedges[-1], 
+                      yedges[0], yedges[-1]]
+            # create map
+            from mpl_toolkits.basemap import Basemap, shiftgrid, cm
+            _f = pl.figure()
+            _ax = _f.add_axes([0.1,0.1,0.8,0.8])
+            _ax.set_title('EQ target catalog count')
+            
+            _m = Basemap(projection='cyl', 
+                        llcrnrlon = l['xmin'],
+                        llcrnrlat = l['ymin'],
+                        urcrnrlon = l['xmax'],
+                        urcrnrlat = l['ymax'],
+                        suppress_ticks=False,
+                        resolution='i', 
+                        area_thresh=1000.,
+                        ax = _ax)
+            _m.drawcoastlines(linewidth=1)
+            _m.drawcountries(linewidth=1)
+            ax = _m.ax.imshow(heatmap.T, 
+                         origin='low', 
+                         extent=extent,
+                         cmap=pl.cm.spectral_r,
+                         interpolation='nearest',
+                         #vmin = 000,
+                         #vmax = 500,
+                         )
+            _f.colorbar(ax)
+            # plot catalog
+            _m.scatter(x, y, alpha=0.1, facecolor='None')
+            #show
+            pl.show()
+        
+        # remember that grid is represented by some meshgrid vector...
+        shp = (self.grid_shape[0]*self.grid_shape[1], )
+        return heatmap.reshape(shp) #observed targets events by grid cell
+
+            
+
+    def poissonian_probability(self, Np, n):
+#         print Np, n
+#         print Np.shape, n.shape
+        p = lambda Np, n : (Np**n)*np.exp(-1*Np) / np.math.factorial(n)
+        return np.array( [ p(Np, n) for (Np, n) in zip(Np, n) ] )
+
+
+    def negative_log_likelihood(self, parameters):
+        
+        # give parameters meaning
+        r_min = parameters[0]
+        k = parameters[1]
+        a = parameters[2]
+        
+        Np = self.stationary_rate_model(self.r, self.t, r_min, k, a)
+        n = self.observed_number_of_events()
+
+        p = self.poissonian_probability(Np, n)
+        NLL = -1 * np.sum(np.log10( p ))
+        print NLL
+        return NLL
+
+
 #     def rate_model(self, r, t, p):
 # 
 #         r_min, k, a = p[0], p[1], p[2]
@@ -370,24 +500,7 @@ if __name__ == '__main__':
                            [1900., 6.5],
                            [1800., 7.0]])
     
-#    mag_completeness = completeness(comp_table)
-    t = np.array([ dt.date(1991, 01, 01),
-                   dt.date(1990, 01, 01) ,
-                   dt.date(1979, 01, 01)  ])
-
-#     c = comp_table
-#     y = c[:,0]
-#     m = c[:,1]
-#     
-#     years = [ min( y[ (y >= t.year) ] ) if len( y[ (y >= t.year) ] ) > 0 else 0 for t in t ]
-#     mc = [ np.array([0]) if _i == 0 else m[(y == _i)] for _i in years ]
-#     
-#     mc = np.array(mc).T
-#     
-    
-#    print mag_completeness.magnitude(r=[0,0], t=t)
-#    exit()
-    
+        
     #print catalogue
     # create grid specifications
     #[xmin, xmax, spcx, ymin, ymax, spcy, zmin, spcz]
@@ -395,24 +508,79 @@ if __name__ == '__main__':
                         [ -80, -30, 1, -37, 14, 1, 0, 30, 10])
 
     # create smooth class 
-    s = smoothing(catalogue, 
-                  grid_limits,
-                  comp_table)
+    s = smoothing(catalogue = catalogue, 
+                  grid_limits = grid_limits,
+                  completeness_table = comp_table,
+                  stationary_time_step_in_days = 100,
+                  catalogue_year_divisor = 2000,
+                  target_minimum_magnitude = 4.0)
+
+#     p = [0.01, 14, 200]
+#     s.negative_log_likelihood(p)
+
+    r_constraint = lambda p: p[0] - 1.0e-8
+    k_constraint = lambda p: p[1] - 1
+    a_constraint = lambda p: p[2] - 1
+
+    from scipy import optimize
+    # Run the minimizer
+    initial_parameters = [1, 2, 1]
+    results = optimize.fmin_slsqp(s.negative_log_likelihood,
+                                   initial_parameters,
+                                   ieqcons=[r_constraint, 
+                                            k_constraint,
+                                            a_constraint],
+                                  iter = 100)
+                
+    # Print the results. They should be really close to your actual values
+    print results
+
     #s.compute_bandwidths()
-    # grid space
-    #r, grid_shape = s._create_grid(grid_limits)
 
     #r = np.array([ [-46, -26], [-50, -20], [-40, -10] ])
     #t = np.array([ dt.date(2010, 01, 01) ])
-    exit()
-    print s.rate_model(s.r, t, r_min=0.01, k=4, a=100)
 
-    #s.optimize_catalogue_bandwidths(k=3, a=20)
-#    rates = s.rate(r, t, r_min=0.001, k=4, a=200)
+#     _y = np.arange(2000, 1959, -1)
+#     _m = np.arange(11,0,-2)
+#     print _m
+#     t = []
+#     for y in _y:
+#         for m in _m:
+#             t.append(dt.date(y, m, 01))
+#     #exit()
+#     # 90 days vector ?!?! 
+#     #t = np.array([ dt.date(year, 01, 01) for year in _y ])
+#     t = np.array(t)
     
-#     pl.imshow(rates.reshape(grid_shape), origin='lower')
+    # grid space
+    #r, grid_shape = s._create_grid(grid_limits)
+
+    #rates = s.stationary_rate_model(s.r, t, r_min=0.01, k=4, a=100)
+    #print sum(rates), rates
+
+    #print sum_rates * nt / nl
+    
+    #print stationary_rates.shape
+    #s.optimize_catalogue_bandwidths(k=3, a=20)
+    #rates = s.rate(r, t, r_min=0.001, k=4, a=200)
+
+    
+#     pl.imshow(stationary_rates.reshape(grid_shape), origin='lower')
 #     pl.colorbar()
 #     pl.show()    
+
+#     import pylab as p
+#     from mpl_toolkits.mplot3d import axes3d as p3
+#     
+#     fig=p.figure()
+#     ax = p3.Axes3D(fig)
+#     ax.scatter(s.r[:,0], s.r[:,1], rates)
+#     ax.set_xlabel('X')
+#     ax.set_ylabel('Y')
+#     ax.set_zlabel('Z')
+#     fig.add_axes(ax)
+#     p.show()
+    
     # make grid ?!!?
     
     #r = compute_rates()
