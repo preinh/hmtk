@@ -104,11 +104,12 @@ class smoothing(object):
         return p[0] + a*p[1]
     
     def _cnn_time_constraint(self, p, X, k, a, tree):
-        #print tree, k
+        k = k if (k >= 1) else 1
         _d, _i = tree.query([0., 0.], k=np.round(k))
         return p[0] - np.max(  X[_i, 0]  )
     
     def _cnn_space_constraint(self, p, X, k, a, tree):
+        k = k if (k >= 1) else 1
         _d, _i = tree.query([0.,0.], k=np.round(k))
         return p[1] - np.max(  X[_i, 1]  )
 
@@ -279,7 +280,8 @@ class smoothing(object):
         #print K2.shape, K2, 
         #print norm.shape, norm
         # compute rate
-        rates = [ r_min + sum(norm * K1 * K2) for K2 in K2 ] 
+        rates = np.array([ r_min + sum(norm * K1 * K2) for K2 in K2 ])
+        rates[ (rates < r_min) ] = r_min
         return rates
 
     def _create_grid(self, use3d=False):
@@ -332,7 +334,7 @@ class smoothing(object):
 #             pl.show()
     
         # get de median of rates distribution
-        rates = np.array([ np.median(rate[ rate > r_min ]) for rate in rates ])
+        rates = np.array([ np.median(rate) for rate in rates ])
 
         if normalized:
             nt = self.target_catalogue.get_number_events()
