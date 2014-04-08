@@ -13,7 +13,7 @@ from hmtk.seismicity.smoothing.kernels import gaussian
 from hmtk.seismicity.utils import haversine
 from matplotlib import pylab as pl
 
-from hmtk.plotting.mapping import HMTKBaseMap 
+#from hmtk.plotting.mapping import HMTKBaseMap 
 
 class smoothing(object):
     
