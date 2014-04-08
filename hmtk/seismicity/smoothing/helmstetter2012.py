@@ -442,8 +442,9 @@ class smoothing(object):
         n = self.observed_number_of_events()
 
         p = self.poissonian_probability(Np, n)
-        if p <= r_min:
-            p[ (p <= r_min) ] = r_min
+        
+        #p[ (p <= r_min) ] = r_min
+        print p
         NLL = np.sum(np.log10( p ))
         print NLL
         return NLL
@@ -539,8 +540,8 @@ if __name__ == '__main__':
     from hmtk.parsers.catalogue.csv_catalogue_parser import CsvCatalogueParser
     import os
 
-    BASE_PATH = '/Users/pirchiner/dev/pshab/data_input/'
-    OUTPUT_FILE = 'data_output/hmtk_bsb2013_decluster_woo_rates.csv'
+    BASE_PATH = '../../../../pshab/data_input/'
+    OUTPUT_FILE = '../../../../pshab/data_output/hmtk_bsb2013_decluster_woo_rates.csv'
     TEST_CATALOGUE = 'hmtk_bsb2013.csv'
     
     _CATALOGUE = os.path.join(BASE_PATH,TEST_CATALOGUE)
