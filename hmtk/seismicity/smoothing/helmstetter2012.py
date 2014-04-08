@@ -71,13 +71,14 @@ class smoothing(object):
 
 # TODO temporary
 # estimation of time integrator...
-        _y = np.arange(2000, 1959, -1)
+        _y = np.arange(2000, 1959, -2)
         _m = np.arange(12,0,-6)
         #print _m
         t = []
         for y in _y:
-            for m in _m:
-                t.append(dt.date(y, m, 01))
+#             for m in _m:
+#                 t.append(dt.date(y, m, 01))
+            t.append(dt.date(y, 01, 01))
         #exit()
         # 90 days vector ?!?! 
         #t = np.array([ dt.date(year, 01, 01) for year in _y ])
@@ -117,7 +118,8 @@ class smoothing(object):
                                    args=(X, k, a, tree),
                                    ieqcons=[self._cnn_time_constraint, 
                                             self._cnn_space_constraint],
-                                   full_output=False)
+                                   full_output=False,
+                                   iprint=False)
         return h, d
 
 
@@ -145,7 +147,7 @@ class smoothing(object):
         #for each earthquake i
         for i, v in enumerate(zip(D, T)):
             # variable init
-            distances, origin_time = v[0], v[1]
+            distances, event_time = v[0], v[1]
 
             # minimum distance correction
             _i = distances <= 1.0
@@ -153,7 +155,7 @@ class smoothing(object):
 
             # get 'days' timedelta
             # TODO: ckeck in the future if dond be exclude 'past' events 
-            days = np.array([ (origin_time - t).days for t in T ])
+            days = np.array([ (event_time - other_event_day).days for other_event_day in T ])
             
             # condense vector [t, r], but exclude exclude the calculation point
             X = np.array(zip(days.ravel(), distances.ravel()))[1:]
@@ -230,15 +232,18 @@ class smoothing(object):
         _d = catalogue.data['day']
         T = np.array([ dt.date(y, m, d) for (y, m, d) in zip(_y, _m, _d) ])
         
+        ####  T  I  M  E
         # compute time differences from t to each earthquake i on catalogue
         # select days
         # TODO: generalize for vector entry t
+        # but now works with one t @time
         days = np.array([ (t - _t).days for _t in T ])
         # filter catalog t_i < t 
         # only past events
         _i = days <= 0
         days = days[_i]
 
+        ####  S  P  A  C  E
         # filter lats and lons
         lx = catalogue.data['longitude'][_i]
         ly = catalogue.data['latitude'][_i]
@@ -249,14 +254,14 @@ class smoothing(object):
         # compute hi, di
         #self.optimize_catalogue_bandwidths(k, a)
         
-        # get optimized h, d
+        ####  B  A  N  D  W  I  D  T  H
+        # get optimized h, d 
         h = catalogue.data['h'][_i]
         d = catalogue.data['d'][_i]
 #         h = np.ones(len(lx))
 #         d = np.ones(len(lx))
         
-        w = catalogue.data['w'][_i]
-        
+        ####  K  E  R  N  E  L
         # compute kernels and normalization factor
         time_kernel = gaussian.Kernel()  
         K1 = time_kernel.value(days, h)
@@ -266,9 +271,13 @@ class smoothing(object):
         K2 = distance_kernel.value(distances, d)
         #print distances.shape, K2.shape
 
+        ####  W  E  I  G  H  T
+        w = catalogue.data['w'][_i]
         norm = (2. * w ) / (h * d * d)
         #print norm.shape
-        #print K1, K2, norm
+        #print K1.shape, K1,
+        #print K2.shape, K2, 
+        #print norm.shape, norm
         # compute rate
         rates = [ r_min + sum(norm * K1 * K2) for K2 in K2 ] 
         return rates
@@ -304,24 +313,49 @@ class smoothing(object):
         
 
     def stationary_rate_model(self, r, t, r_min, k, a, normalized=True):
-
+        #print t
+        
+        # hi, di, optimization
         self.optimize_catalogue_bandwidths(k=k, a=a)
-        rates = [ self.rate(self.r, t, r_min=r_min, k=k, a=a) for t in t ]
-
+        # rate timeseries on each cell grid
+        #print t
+        rates = [ self.rate(r, _t, r_min=r_min, k=k, a=a) for _t in t ]
+        #print t
         rates = np.array(rates).T # one timeseries array for each grid point
         
-#         # plot ?!
+        #print t, t.shape
+        #print rates.shape, rates
+        # plot ?!
 #         for _y in rates:
 #             pl.scatter(t, _y)
-#             pl.axhline(np.median(_y))
+#             pl.axhline(np.average(_y))
 #             pl.show()
     
         # get de median of rates distribution
-        rates = np.array([ np.median(r) for r in rates ])
+        rates = np.array([ np.median(rate[ rate > r_min ]) for rate in rates ])
 
         if normalized:
-            nt = s.target_catalogue.get_number_events()
+            nt = self.target_catalogue.get_number_events()
             rates = (rates * nt) / sum(rates)
+        
+#         print rates.shape, rates
+
+        import pylab as p
+        from mpl_toolkits.mplot3d import axes3d as p3
+
+        print r_min, k, a
+                  
+#         fig=p.figure()
+#         ax = p3.Axes3D(fig)
+#         ax.scatter(r[:,0], r[:,1], rates)
+#         ax.set_xlabel('X')
+#         ax.set_ylabel('Y')
+#         ax.set_zlabel('Z')
+#         fig.add_axes(ax)
+#         p.show()
+
+
+#         exit()
 
         return rates
         
@@ -400,17 +434,41 @@ class smoothing(object):
     def negative_log_likelihood(self, parameters):
         
         # give parameters meaning
-        r_min = parameters[0]
-        k = parameters[1]
-        a = parameters[2]
+        r_min = parameters[2]
+        k = parameters[0]
+        a = parameters[1]
         
         Np = self.stationary_rate_model(self.r, self.t, r_min, k, a)
         n = self.observed_number_of_events()
 
         p = self.poissonian_probability(Np, n)
-        NLL = -1 * np.sum(np.log10( p ))
+        if p <= r_min:
+            p[ (p <= r_min) ] = r_min
+        NLL = np.sum(np.log10( p ))
         print NLL
         return NLL
+
+
+    def optimize_seismicity_model(self):
+        
+        r_constraint = lambda p: p[2] - 0.001
+        k_constraint = lambda p: p[0] - 1.5
+        a_constraint = lambda p: p[1] - 1.5
+    
+        # Run the minimizer
+        initial_parameters = [10, 100, 0.001]
+        results = optimize.fmin_cobyla(s.negative_log_likelihood,
+                                       initial_parameters,
+                                       cons=[r_constraint, 
+                                             k_constraint,
+                                             a_constraint],
+                                       rhobeg = 10.0,
+                                       rhoend = 1,
+                                       maxfun = 100)
+                    
+        # Print the results. They should be really close to your actual values
+        return results
+
 
 
 #     def rate_model(self, r, t, p):
@@ -483,7 +541,7 @@ if __name__ == '__main__':
 
     BASE_PATH = '/Users/pirchiner/dev/pshab/data_input/'
     OUTPUT_FILE = 'data_output/hmtk_bsb2013_decluster_woo_rates.csv'
-    TEST_CATALOGUE = 'hmtk_bsb2013_decluster.csv'
+    TEST_CATALOGUE = 'hmtk_bsb2013.csv'
     
     _CATALOGUE = os.path.join(BASE_PATH,TEST_CATALOGUE)
     
@@ -501,6 +559,15 @@ if __name__ == '__main__':
                            [1800., 7.0]])
     
         
+#     comp_table = np.array([[2000., 2.5],
+#                            [1990., 3.0],
+#                            [1980., 3.5],
+#                            [1970., 4.5],
+#                            [1960., 5.0],
+#                            [1900., 6.5],
+#                            [1800., 7.0]])
+    
+        
     #print catalogue
     # create grid specifications
     #[xmin, xmax, spcx, ymin, ymax, spcy, zmin, spcz]
@@ -513,27 +580,29 @@ if __name__ == '__main__':
                   completeness_table = comp_table,
                   stationary_time_step_in_days = 100,
                   catalogue_year_divisor = 2000,
-                  target_minimum_magnitude = 4.0)
+                  target_minimum_magnitude = 3.5)
+
+    print s.optimize_seismicity_model()
 
 #     p = [0.01, 14, 200]
 #     s.negative_log_likelihood(p)
 
-    r_constraint = lambda p: p[0] - 1.0e-8
-    k_constraint = lambda p: p[1] - 1
-    a_constraint = lambda p: p[2] - 1
-
-    from scipy import optimize
-    # Run the minimizer
-    initial_parameters = [1, 2, 1]
-    results = optimize.fmin_slsqp(s.negative_log_likelihood,
-                                   initial_parameters,
-                                   ieqcons=[r_constraint, 
-                                            k_constraint,
-                                            a_constraint],
-                                  iter = 100)
-                
-    # Print the results. They should be really close to your actual values
-    print results
+#     r_constraint = lambda p: p[0] - 1.0e-8
+#     k_constraint = lambda p: p[1] - 1
+#     a_constraint = lambda p: p[2] - 1
+# 
+#     from scipy import optimize
+#     # Run the minimizer
+#     initial_parameters = [1, 2, 1]
+#     results = optimize.fmin_slsqp(s.negative_log_likelihood,
+#                                    initial_parameters,
+#                                    ieqcons=[r_constraint, 
+#                                             k_constraint,
+#                                             a_constraint],
+#                                   iter = 100)
+#                 
+#     # Print the results. They should be really close to your actual values
+#     print results
 
     #s.compute_bandwidths()
 
