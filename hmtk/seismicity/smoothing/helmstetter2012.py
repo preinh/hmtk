@@ -9,7 +9,7 @@ from scipy import spatial, optimize
 from hmtk.seismicity.smoothing import utils
 from hmtk.seismicity.smoothing.kernels import gaussian
 from hmtk.seismicity.utils import haversine
-from matplotlib import pylab as pl
+#from matplotlib import pylab as pl
 
 from multiprocessing import Pool
 
@@ -459,19 +459,21 @@ class smoothing(object):
 
     def optimize_seismicity_model(self):
         
-        from openopt import MINLP
+        from openopt import MINLP 
+        from openopt import GLP
         f = s.negative_log_likelihood
         
         x0=[1, 1, 1] # a, k, r_min
-        p = MINLP(f, x0, maxIter = 1e3)
+        #p = MINLP(f, x0, maxIter = 1e3)
+        p = GLP(f, x0, maxIter = 1e4)
 
         p.lb = [  0,   1,  0]
         p.ub = [500, 100,  1]
 
-        p.contol = 1.1e-6
+        #p.contol = 1.1e-6
 
-        p.name = 'minlp_1'
-        nlpSolver = 'ipopt'
+        p.name = 'glp_1'
+        nlpSolver = 'de'
         
         # coords of discrete variables and sets of allowed values
         #p.discreteVars = {0:range(0, int(1e3)), 1:range(1, int(2e2))}
@@ -479,7 +481,7 @@ class smoothing(object):
         # required tolerance for discrete variables, default 10^-5
         p.discrtol = 1.1e-5
         
-        results = p.solve('branb', nlpSolver=nlpSolver, plot = True)
+        results = p.solve('de', plot = False)
 
 #         r_constraint = lambda p: p[2] - 0.001
 #         k_constraint = lambda p: p[1] - 1.5
