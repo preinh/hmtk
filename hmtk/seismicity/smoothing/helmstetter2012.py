@@ -9,7 +9,7 @@ from scipy import spatial, optimize
 from hmtk.seismicity.smoothing import utils
 from hmtk.seismicity.smoothing.kernels import gaussian
 from hmtk.seismicity.utils import haversine
-#from matplotlib import pylab as pl
+from matplotlib import pylab as pl
 
 from multiprocessing import Pool
 
@@ -354,7 +354,7 @@ class smoothing(object):
             #plpmeshcolor()
             pl.scatter(_x, _y, c=rates, cmap=pl.cm.get_cmap('RdYlGn_r'), marker='s', alpha=0.7)
             pl.colorbar()
-            pl.title('Stationary Seismicity Rate')
+            pl.title('Hemstetter2012, Stationary Seismicity Rate [a=%s, k=%s]'%(a, k))
             pl.show()
             
             import csv
@@ -638,9 +638,11 @@ if __name__ == '__main__':
 #     s.plot_catalogue(s.learning_catalogue, title="Learning Catalogue [1960-2000]")
 #     s.plot_catalogue(s.target_catalogue, title="Target Catalogue U \ ]1960-2000[")
 
-    print s.optimize_seismicity_model()
-#     s.plot_stationary_rate = True
-#     s.stationary_rate_model(s.r, s.t, r_min=0.0010, k=29, a=165)
+#     res =  s.optimize_seismicity_model()
+#     print res
+
+    s.plot_stationary_rate = True
+    s.stationary_rate_model(s.r, s.t, r_min=0.00001, k=5, a=10)
     
 #     
 #     
