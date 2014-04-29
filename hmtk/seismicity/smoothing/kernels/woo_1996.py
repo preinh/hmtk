@@ -75,21 +75,21 @@ class Frankel_1995(BaseSmoothingKernel):
         return k
     
     
-    def _seismic_rate(self, catalogue, magnitude):
-        # sum 
-        rate_locations = np.zeros(self.grid_locations.shape)
-        
-        event_locations = np.array([catalogue.data['longitude'], 
-                                     catalogue.data['latitude']])
-        
-        h = self.H(magnitude)
-        
-        d = lambda x, y : np.sqrt( y^2 + x^2 )
-        for x in self.grid_locations:
-            
-            r = [ d for d in d(x, event_locations) if d <= h ] 
-        
-        pass
+#     def _seismic_rate(self, catalogue, magnitude):
+#         # sum 
+#         rate_locations = np.zeros(self.grid_locations.shape)
+#         
+#         event_locations = np.array([catalogue.data['longitude'], 
+#                                      catalogue.data['latitude']])
+#         
+#         h = self.H(magnitude)
+#         
+#         d = lambda x, y : np.sqrt( y^2 + x^2 )
+#         for x in self.grid_locations:
+#             
+#             r = [ d for d in d(x, event_locations) if d <= h ] 
+#         
+#         pass
 
 
 class IsotropicGaussianWoo(BaseSmoothingKernel):

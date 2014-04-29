@@ -504,7 +504,7 @@ class SmoothedSeismicity(object):
                         'Latitude': '%.5f' % row[1],
                         'Depth': '%.3f' % row[2],
                         'Observed Count': '%.5e' % row[3],
-                        'Smoothed Rate': '%.5e' % row[4],
+                        'Smoothed Rate': '%.5e' % np.log10(row[4]) if row[4] > 0 else np.NaN,
                         'b-value': '%.4f' % self.bval}
             writer.writerow(row_dict)
         fid.close()

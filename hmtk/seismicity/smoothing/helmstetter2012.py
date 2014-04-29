@@ -168,6 +168,7 @@ class smoothing(object):
             # get time: days timedelta
             # TODO: ckeck in the future if dont be exclude 'past' events 
             days = np.array([ (event_time - other_time).days for other_time in T ])
+            #days = np.array([ (event_time - other_time).days if event_time < other_time else 0 for other_time in T ])
 
             # get distances for each another earthquake
             # minimum distance correction
@@ -373,9 +374,10 @@ class smoothing(object):
             fid.close()
 
 
-        if self.log: print "reporting parameters: r_min=%.4f, k=%d, a=%d" % (r_min, k, a)
+        if self.log: print "reporting parameters: r_min=%e, k=%d, a=%d" % (r_min, k, a)
 
-        return rates
+        x, y = r[:,0], r[:,1]
+        return x, y, rates
         
     
     def observed_number_of_events(self):
@@ -442,7 +444,7 @@ class smoothing(object):
         r_min = parameters[2]
         k = parameters[1]
         a = parameters[0]
-        Np = self.stationary_rate_model(self.r, self.t, r_min, k, a)
+        _, _, Np = self.stationary_rate_model(self.r, self.t, r_min, k, a)
         n = self.observed_number_of_events()
 
         p = self.poissonian_probability(Np, n)

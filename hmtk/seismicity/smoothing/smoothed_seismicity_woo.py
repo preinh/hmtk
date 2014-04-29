@@ -122,19 +122,20 @@ class SmoothedSeismicityWoo(object):
 
     def add_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
 
-        H = lambda m, c, d: c * np.exp(d*m)
+        #H = lambda m, c, d: c * np.exp(d*m)
 
         
-        _data = self._get_bandwidth_data()         # mags, mean_minimum_pairwise_distance
+        # mags, mean_minimum_pairwise_distance
+        _data = self._get_bandwidth_data()         
         c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
         self.c = c
         self.d = d
         return None
     
-        m = self.catalogue.data['magnitude']
-        self.catalogue.data['bandwidth'] = H(m, c, d)
-        
-        return None
+#         m = self.catalogue.data['magnitude']
+#         self.catalogue.data['bandwidth'] = H(m, c, d)
+#         
+#         return None
 
     def _get_bandwidth_data(self, magnitude_bin=0.5):
 
@@ -228,9 +229,13 @@ class SmoothedSeismicityWoo(object):
         dy = l['yspc']
         dz = l['zspc']
         
-        x = np.arange(l['xmin'] + dx/2., l['xmax'] + dx, dx) 
-        y = np.arange(l['ymin'] + dy/2., l['ymax'] + dy, dy) 
-        z = np.arange(l['zmin'] + dz/2., l['zmax'] + dz, dz)
+        x = np.arange(l['xmin'] + dx/2., l['xmax'], dx) 
+        y = np.arange(l['ymin'] + dy/2., l['ymax'], dy) 
+        z = np.arange(l['zmin'] + dz/2., l['zmax'], dz)
+        
+#         print min(x), max(x)
+#         print min(y), max(y)
+#         print min(z), max(z)
         
         if not use3d:
             #spacement = [dx, dy]
@@ -265,12 +270,6 @@ class SmoothedSeismicityWoo(object):
  
         :param catalogue:
             Instance of the hmtk.seismicity.catalogue.Catalogue class
-            catalogue.data dictionary containing the following -
-            'year' - numpy.ndarray vector of years
-            'longitude' - numpy.ndarray vector of longitudes
-            'latitude' - numpy.ndarray vector of latitudes
-            'depth' - numpy.ndarray vector of depths
-            'magnitude' - numpy.ndarray vector of magnitudes
  
         :param dict config:
             Configuration settings of the algorithm:
@@ -303,14 +302,18 @@ class SmoothedSeismicityWoo(object):
  
         year = catalogue.end_year
         
+        # get magnitude-completeness table for each magnitude
         ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
                                                        catalogue, 
                                                        magnitude_increment=mag_bin)
+        
+        # create grid
         grid = self._create_grid(use3d=use3d)
 
         x = grid[:,0]
         y = grid[:,1]
 
+        # distances from grid to epicenters
         distances = haversine(x, 
                               y, 
                               catalogue.data['longitude'],
@@ -323,34 +326,48 @@ class SmoothedSeismicityWoo(object):
         
         # divide bins catalog_bins
         mags = np.arange(min_magnitude, max_magnitude + dm, dm)
-        #mags = mags + dm/2.
+        # get observation time for each magnitude
         time = year - ct[:,0] 
 
-        #print len(zip(mags, time))
-        #exit()
-
+# TODO refactor
+        # not properly a kernel but some auxiliar function
+        # C and D parameters was calculated by [add_bandwith_values]
         k = Frankel_1995(self.c, self.d)
         
-        r_max = k.H(mags + dm/2.) * nh
-        #print len(mags), len(h), len(r_max)
+        # use it to max influence distance for each magnitude 
+        r_max = k.H(mags) * nh
+        _d = []
         self.data = []
+        # for each grid point
         for i, c in enumerate(zip(x,y)):
+            # get distances from cell to each epicenter
             r = distances[i,:]
-            #print i, c, r.shape[0]
             rates=[]
+            # for each magnitude bin 
             for (m, t, limit) in zip(mags + dm/2, time, r_max):
-                #print m, m + dm, t
                 
+                # indexes for filtered magnitude
                 a = np.logical_and( M >= m - dm/2., M < m + dm/2.)
+                # and influence kernel zone
                 b = np.logical_and(r <= limit, r > 0 )
                 _i = np.logical_and(a, b)
                 
-                _k = k.kernel(m, r[_i]) / t 
+#                 if m <= 4.25:
+#                     print r[_i]
                 
+                # get kernel values
+                _k = k.kernel(m, r[_i]) / t 
+                # and sum
                 rates.append(_k.sum())
             
+            # lon, lat, depth, m0, dm, ...
             self.data.append([c[0], c[1], 0, min_magnitude, dm, rates])
-        #print self.data
+ 
+#         from matplotlib import pylab as plt
+#         plt.hist(_d, bins=30)
+#         plt.show()
+        
+        return self.data
 
 
     def write_to_csv(self, filename):
@@ -375,6 +392,34 @@ class SmoothedSeismicityWoo(object):
                         'Rates': "%s" % str(row[5])[1:-1].replace(",", "")}
             writer.writerow(row_dict)
         fid.close()
+
+    def write_rates(self, filename):
+        '''
+        Exports to simple csv
+        :param str filename:
+            Path to file for export
+        '''
+        fid = open(filename, 'wt')
+        # Create header list
+        header_info = ['Longitude', 'Latitude', 'Depth', 'm_min', 'm_bin', 'a0_value']
+        writer = csv.DictWriter(fid, fieldnames=header_info)
+        headers = dict((name0, name0) for name0 in header_info)
+        # Write to file
+        writer.writerow(headers)
+        for row in self.data:
+            # a = log10(alpha*m_min) + b*m_min 
+            _a0 = np.log10(sum(row[5])*row[3]) + self.bval*row[3]
+            row_dict = {'Longitude': '%.5f' % row[0],
+                        'Latitude': '%.5f' % row[1],
+                        'Depth': '%.3f' % row[2],
+                        'm_min': '%.2f' % row[3],
+                        'm_bin': '%.2f' % row[4],
+                        'a0_value': "%e" % _a0,
+                        }
+            writer.writerow(row_dict)
+        fid.close()
+
+
 
 
 SMOOTHED_SEISMICITY_METHODS = CatalogueFunctionRegistry()
