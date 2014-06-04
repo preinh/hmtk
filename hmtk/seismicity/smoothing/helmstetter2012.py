@@ -61,6 +61,7 @@ class smoothing(object):
         self.b_value = config['b_value']
         # purge 'UNcomplete' events
         # add a weight column to each eq on catalog
+        print "hello world"
         self.estimate_catalogue_incompleteness_weight(self.learning_catalogue)
         
         # SPACE: grid limits, cells, shape
@@ -168,16 +169,26 @@ class smoothing(object):
             # get time: days timedelta
             # TODO: ckeck in the future if dont be exclude 'past' events 
             days = np.array([ (event_time - other_time).days for other_time in T ])
+            print days, len(days)
+            print "opa0"
+
+            days = np.array([ d if d >= 0 else 0 for d in days])
             #days = np.array([ (event_time - other_time).days if event_time < other_time else 0 for other_time in T ])
+            print "opa1"
+            print len(days),days
 
             # get distances for each another earthquake
             # minimum distance correction
             _i = distances <= 1.0
             distances[_i] = 1.0
             
+            print "opa02"
+            print len(distances), distances 
             # condensed vector [t, r], but exclude exclude the calculation point
             TD = np.array( zip( days.ravel(), distances.ravel() ) )[1:]
 
+            print "opa2"
+            print TD.shape
             # compute nearest neighbor tree
             
             # compute each [h, d] by CNN 

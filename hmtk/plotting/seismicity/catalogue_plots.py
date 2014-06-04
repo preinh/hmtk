@@ -250,7 +250,7 @@ def plot_magnitude_time_density(catalogue, mag_int, time_int,
 
 def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
     """
-    Counts the number of ea
+    Counts the number of eq
     """
     inc = 1E-7
     # Find the natural bin limits
@@ -282,7 +282,7 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
         #print mag_bins[obs_idx], temp_rates
         temp_rates = temp_rates.astype(float) / obs_time[iloc]
         if iloc == n_comp - 1:
-            obs_rates[obs_idx] = temp_rates
+            obs_rates[obs_idx[:-1]] = temp_rates
         else:
             obs_rates[obs_idx[:-1]] = temp_rates
     selector = np.where(obs_rates > 0.)[0]
@@ -317,6 +317,9 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
     plt.figure(figsize=DEFAULT_SIZE)
     plt.semilogy(recurrence[:, 0], recurrence[:, 1], 'bo')
     plt.semilogy(recurrence[:, 0], recurrence[:, 2], 'rs')
+    #plt.semilogy(recurrence[:, 0], , 'rs')
+    plt.xlim(0.)
+    plt.ylim(1e-4, 1e10)
     plt.xlabel('Magnitude', fontsize='large')
     plt.ylabel('Annual Rate', fontsize='large')
     plt.legend(['Incremental', 'Cumulative'])
