@@ -58,7 +58,7 @@ from hmtk.seismicity.smoothing.kernels.base import BaseSmoothingKernel
 
 class Frankel_1995(BaseSmoothingKernel):
     
-    def __init__(self, c, d, D=1.75):
+    def __init__(self, c, d, D=1.5):
         self.D = D
         self.H = lambda m : c*np.exp(m*d)
 
@@ -70,7 +70,11 @@ class Frankel_1995(BaseSmoothingKernel):
         #if r > h: return 0
 
         # K(M, x) = [D/2nh(M)] {h(M)/r}^2-D
-        k = ( self.D / (2*np.pi*h)) * (h / r)**(2 - self.D)
+        k = (self.D/2/np.pi/h) * (h / r)**(2 - self.D)
+        
+        #outside_kernel = r > h
+        #k[outside_kernel] = 0
+        
         #print k
         return k
     

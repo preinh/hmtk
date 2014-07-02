@@ -59,6 +59,8 @@ from hmtk.seismicity.smoothing.kernels.woo_1996 \
 
 from hmtk.registry import CatalogueFunctionRegistry
 
+import matplotlib.pyplot as plt
+
 from hmtk.seismicity.utils import haversine
 
 class SmoothedSeismicityWoo(object):
@@ -122,20 +124,31 @@ class SmoothedSeismicityWoo(object):
 
     def add_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
 
-        #H = lambda m, c, d: c * np.exp(d*m)
-
-        
+# rs(m) = 1.340e0.6m (Espagne, E) (9.9) 
+# rs(m) = 0.048e1.55m (Norvege, N) (9.10)
+       
         # mags, mean_minimum_pairwise_distance
         _data = self._get_bandwidth_data()         
         c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
         self.c = c
         self.d = d
+        plt.xkcd()
+        H = lambda m, c, d: c * np.exp(d*m)
+        m = self.catalogue.data['magnitude']
+        #self.catalogue.data['bandwidth'] = H(m, c, d)
+        plt.semilogy(m, H(m, c, d), color='#75B08A', label='Brazil [$h(m)=%.2fe^{%.2fm}$]'%(c,d))
+        plt.semilogy(m, H(m, 1.34, 0.60), color='#F0E797', label='Spain [$h(m)=1.34e^{0.60m}$]')
+        plt.semilogy(m, H(m, 0.05, 1.55), color='#FF9D84', label='Norway [$h(m)=0.05e^{1.55m}$]')
+        plt.semilogy(_data['magnitude'], _data['distance'], linewidth=0, marker='o', color='#FF5460')
+        plt.title("\gls{bsb2013} bandwidth function [woo1996]")
+        plt.xlabel('$m$ [magnitude]')
+        plt.ylabel('$h(m)$ [distance]')
+        plt.legend(loc='lower right', fontsize='small')
+        plt.show()
+
         return None
-    
-#         m = self.catalogue.data['magnitude']
-#         self.catalogue.data['bandwidth'] = H(m, c, d)
-#         
-#         return None
+
+
 
     def _get_bandwidth_data(self, magnitude_bin=0.5):
 
@@ -183,7 +196,7 @@ class SmoothedSeismicityWoo(object):
         
         h = np.log(data['distance'])
         m = np.array(data['magnitude'])
-        h_err = 0.01*np.ones(len(h))
+        h_err = 0.10*np.ones(len(h))
         
         #print h, m
         
@@ -355,17 +368,24 @@ class SmoothedSeismicityWoo(object):
 #                 if m <= 4.25:
 #                     print r[_i]
                 
+                # TODO HERE could be the place to get not
+                # the value @ cell's center but the
+                # integral over cell if the epic are in outside of cell
+                # or get value @ cell-center when it is in the cell.
+                # check with helmstetter code or using woo code.
+                
                 # get kernel values
                 _k = k.kernel(m, r[_i]) / t 
+                
                 # and sum
                 rates.append(_k.sum())
             
             # lon, lat, depth, m0, dm, ...
             self.data.append([c[0], c[1], 0, min_magnitude, dm, rates])
  
-#         from matplotlib import pylab as plt
-#         plt.hist(_d, bins=30)
-#         plt.show()
+        from matplotlib import pylab as plt
+        plt.hist(_d, bins=30)
+        plt.show()
         
         return self.data
 

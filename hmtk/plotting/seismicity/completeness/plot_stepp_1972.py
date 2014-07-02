@@ -62,7 +62,11 @@ valid_markers = ['*', '+', '1', '2', '3', '4', '8', '<', '>', 'D', 'H', '^',
 DEFAULT_SIZE=(8., 6.)
 DEFAULT_OFFSET=(1.3, 1.0)
 
-def create_stepp_plot(model, filename, filetype='png', filedpi=300):
+def create_stepp_plot(model, filename=None, show=True, 
+                      title = 'Stepp Plot',
+                      filetype='png', figsize=DEFAULT_SIZE, dpi=300, 
+                      legendoffset=DEFAULT_OFFSET,
+                      **kwargs):
     '''
     Creates the classic Stepp (1972) plots for a completed Stepp analysis,
     and exports the figure to a file.
@@ -76,8 +80,8 @@ def create_stepp_plot(model, filename, filetype='png', filedpi=300):
     :param int filedpi:
         Resolution (dots per inch) of output file
     '''
-    plt.figure(figsize=DEFAULT_SIZE)
-    if os.path.exists(filename):
+    plt.figure(figsize=figsize)
+    if filename and os.path.exists(filename):
         raise IOError('File already exists!')
 
     legend_list = [(str(model.magnitude_bin[iloc] + 0.01) + ' - ' +
@@ -102,17 +106,22 @@ def create_stepp_plot(model, filename, filetype='png', filedpi=300):
         plt.loglog(model.time_values,
                    model.sigma[:, iloc],
                    linestyle='None',
-                   marker=marker_vals[iloc],
-                   color=rgb_list[iloc])
+                   #marker=marker_vals[iloc],
+                   marker='+',
+                   #markersize=10,
+                   color=rgb_list[iloc],
+                   zorder=10)
 
-    plt.legend(legend_list, bbox_to_anchor=DEFAULT_OFFSET)
+    plt.legend(legend_list, bbox_to_anchor=legendoffset, fontsize='small')
     plt.grid(True)
     # Plot expected Poisson rate
     for iloc in range(0, len(model.magnitude_bin) - 1):
         plt.loglog(model.time_values,
                    model.model_line[:, iloc],
                    linestyle='-',
+                   linewidth=0.7,
                    marker='None',
+                   alpha = 0.7,
                    color=rgb_list[iloc])
         plt.xlim(model.time_values[0] / 2., 2. * model.time_values[-1])
         xmarker = model.end_year - model.completeness_table[iloc, 0]
@@ -120,9 +129,22 @@ def create_stepp_plot(model, filename, filetype='png', filedpi=300):
         ymarker = 10.0 ** np.interp(np.log10(xmarker),
                                     np.log10(model.time_values[id0]),
                                     np.log10(model.model_line[id0, iloc]))
-        plt.loglog(xmarker, ymarker, 'ks')
-    plt.xlabel('Time (years)', fontsize=15)
+        plt.loglog(xmarker, ymarker, 'ks', zorder=11)
+    plt.xlabel('Time (years)', fontsize='medium')
     plt.ylabel("$\\sigma_{\\lambda} = \\sqrt{\\lambda} / \\sqrt{T}$",
-               fontsize=15)
+               fontsize='medium')
+    plt.title(title)
     # Save figure to file
-    plt.savefig(filename, dpi=filedpi, format=filetype)
+    try:
+        plt.savefig(filename, dpi=dpi, format=filetype)
+        print "file saved as %s"%filename
+    except:
+        print "error on save Stepp plot figure"
+         
+    if show:
+        plt.show() 
+    
+    
+    
+    
+    

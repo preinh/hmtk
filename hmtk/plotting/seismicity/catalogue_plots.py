@@ -4,6 +4,8 @@
 Collection of tools for plotting descriptive statistics of a catalogue
 """
 import os
+from datetime import date
+#from dateutil import parser#, relativedelta
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm, Normalize
@@ -68,7 +70,7 @@ def _get_catalogue_bin_limits(catalogue, dmag):
     return mag_bins
 
 def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
-        bootstrap=None, filename=None, filetype='png', dpi=300):
+        bootstrap=None, filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, **kwargs):
     """
     Creates a histogram of the depths in the catalogue
     :param catalogue:
@@ -81,7 +83,7 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
     :param int bootstrap:
         To sample depth uncertainty choose number of samples
     """
-    plt.figure(figsize=DEFAULT_SIZE)
+    plt.figure(figsize=figsize)
     # Create depth range
     if len(catalogue.data['depth']) == 0:
         raise ValueError('No depths reported in catalogue!')
@@ -89,20 +91,154 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
     depth_hist = catalogue.get_depth_distribution(depth_bins,
                                                   normalisation,
                                                   bootstrap)
-    plt.bar(depth_bins[:-1],
+    plt.barh(depth_bins[:-1],
             depth_hist,
-            width=0.95 * bin_width,
-            edgecolor='k')
-    plt.xlabel('Depth (km)', fontsize='large')
+            height=0.95 * bin_width,
+#            edgecolor='k',
+#            orientation='horizontal',
+#             color='#5fbdce',
+#             alpha=0.6,
+            **kwargs)
+
+    plt.gca().invert_yaxis()
+    
+    plt.ylabel('Depth (km)', fontsize='medium')
     if normalisation:
-        plt.ylabel('Probability Mass Function', fontsize='large')
+        plt.xlabel('Probability Density Function', fontsize='medium')
     else:
-        plt.ylabel('Count')
+        plt.xlabel('Count', fontsize='medium')
     plt.title('Depth Histogram', fontsize='large')
 
     _save_image(filename, filetype, dpi)
     plt.show()
     return
+
+def plot_weekday_histogram(catalogue, normalisation=True,
+        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+        **kwargs):
+    """
+    Creates a histogram of the depths in the catalogue
+    :param catalogue:
+        Earthquake catalogue as instance of :class:
+        hmtk.seismicity.catalogue.Catalogue
+    :param float bin_width:
+        Width of the histogram for the depth bins
+    :param bool normalisation:
+        Normalise the histogram to give output as PMF (True) or count (False)
+    :param int bootstrap:
+        To sample depth uncertainty choose number of samples
+    """
+    plt.figure(figsize=figsize)
+    
+#     print min(catalogue.data['day']), max(catalogue.data['day'])
+#     print min(catalogue.data['month']), max(catalogue.data['month'])
+    
+    t = zip(catalogue.data['year'],  catalogue.data['month'], catalogue.data['day'])
+    d = [ date(t[0], t[1], t[2]).isoweekday() for t in t ]
+
+    bins = np.arange(0.5, 7 +1, 1)
+
+    plt.hist(d, bins=bins, normed=normalisation, **kwargs)
+    plt.hlines((1/7.),xmin=0, xmax=8, linestyles='dashed', **kwargs)
+
+    plt.xlabel('Weekdays (monday=1)', fontsize='medium')
+    plt.xlim(.5, 7.5)
+    if normalisation:
+        plt.ylabel('Probability Density Function', fontsize='medium')
+    else:
+        plt.ylabel('Count')
+    plt.title('Weekdays Histogram', fontsize='large')
+
+    _save_image(filename, filetype, dpi)
+    plt.show()
+    return
+
+
+def plot_hour_histogram(catalogue, normalisation=True,
+        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+        **kwargs):
+    """
+    Creates a histogram of the depths in the catalogue
+    :param catalogue:
+        Earthquake catalogue as instance of :class:
+        hmtk.seismicity.catalogue.Catalogue
+    :param float bin_width:
+        Width of the histogram for the depth bins
+    :param bool normalisation:
+        Normalise the histogram to give output as PMF (True) or count (False)
+    :param int bootstrap:
+        To sample depth uncertainty choose number of samples
+    """
+    plt.figure(figsize=figsize)
+    
+    bins = np.arange(0.5, 24, 1)
+    plt.hist(catalogue.data['hour'], bins=bins, normed=normalisation, **kwargs)
+    plt.hlines((1/24.),xmin=0, xmax=24, linestyles='dashed', **kwargs)
+
+    plt.xlabel('Hour of Day', fontsize='medium')
+    plt.xlim(.5,23.5)
+    if normalisation:
+        plt.ylabel('Probability Density Function', fontsize='medium')
+    else:
+        plt.ylabel('Count', fontsize='medium')
+    plt.title('Earthquake Hours Histogram', fontsize='large')
+
+    _save_image(filename, filetype, dpi)
+    plt.show()
+    return
+
+
+def plot_rate(catalogue, normalisation = False, cumulative=False, 
+              new_figure=True, overlay=False,
+              filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+              **kwargs):
+    """
+    Creates a histogram of the depths in the catalogue
+    :param catalogue:
+        Earthquake catalogue as instance of :class:
+        hmtk.seismicity.catalogue.Catalogue
+    :param float bin_width:
+        Width of the histogram for the depth bins
+    :param bool normalisation:
+        Normalise the histogram to give output as PMF (True) or count (False)
+    :param int bootstrap:
+        To sample depth uncertainty choose number of samples
+    """
+    if new_figure:
+        plt.figure(figsize=figsize)
+    
+    Y = catalogue.data['year']
+    max_year = np.max(Y)
+    min_year = np.min(Y)
+    
+    
+    bins = np.arange(min_year - .5, max_year + 1.5, 1)
+
+    plt.hist(catalogue.data['year'], bins=bins, 
+             histtype='step',
+             normed = normalisation, 
+             cumulative = cumulative,
+             **kwargs)
+        
+#    plt.plot(_e, _h, marker=None, linestyle='-', **kwargs)
+
+    plt.xlim(min_year, max_year)
+
+    plt.xlabel('Year', fontsize='medium')
+    #plt.xlim(.5,23.5)
+    if normalisation:
+        plt.ylabel('Percent', fontsize='medium')
+    else:
+        plt.ylabel('Count', fontsize='medium')
+    plt.title('Earthquakes Records', fontsize='large')
+
+    _save_image(filename, filetype, dpi)
+    if not overlay:
+        plt.show()
+
+    return
+
+
 
 def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
         normalisation=False, bootstrap=None, filename=None, filetype='png',
@@ -142,8 +278,8 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
                depth_bins[:-1],
                mag_depth_dist.T,
                norm=normaliser)
-    plt.xlabel('Magnitude', fontsize='large')
-    plt.ylabel('Depth (km)', fontsize='large')
+    plt.xlabel('Magnitude', fontsize='medium')
+    plt.ylabel('Depth (km)', fontsize='madium')
     plt.xlim(mag_bins[0], mag_bins[-1])
     plt.ylim(depth_bins[0], depth_bins[-1])
     plt.colorbar()
@@ -157,7 +293,7 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     return
 
 def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
-        filetype='png', dpi=300, fmt_string='o'):
+        filetype='png', dpi=300, figsize=DEFAULT_SIZE, fmt_string='o', **kwargs):
     """
     Creates a simple scatter plot of magnitude with time
     :param catalogue:
@@ -168,7 +304,7 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
     :param str fmt_string:
         Symbology of plot
     """
-    plt.figure(figsize=DEFAULT_SIZE)
+    plt.figure(figsize=figsize)
     dtime = catalogue.get_decimal_time()
     if len(catalogue.data['sigmaMagnitude']) == 0:
         print 'Magnitude Error is missing - neglecting error bars!'
@@ -179,9 +315,10 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
                      catalogue.data['magnitude'],
                      xerr=None,
                      yerr=catalogue.data['sigmaMagnitude'],
-                     fmt=fmt_string)
+                     fmt=fmt_string,
+                     **kwargs)
     else:
-        plt.plot(dtime, catalogue.data['magnitude'], fmt_string)
+        plt.plot(dtime, catalogue.data['magnitude'], fmt_string,**kwargs)
     plt.xlabel('Year', fontsize='large')
     plt.ylabel('Magnitude', fontsize='large')
     plt.title('Magnitude-Time Plot', fontsize='large')
@@ -192,7 +329,7 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
 
 def plot_magnitude_time_density(catalogue, mag_int, time_int,
         normalisation=False, bootstrap=None, filename=None, filetype='png',
-        dpi=300):
+        dpi=300, figsize=DEFAULT_SIZE):
     """
     Creates a plot of magnitude-time density
     :param catalogue:
@@ -207,7 +344,7 @@ def plot_magnitude_time_density(catalogue, mag_int, time_int,
     :param int bootstrap:
         To sample magnitude and depth uncertainties choose number of samples
     """
-    plt.figure(figsize=DEFAULT_SIZE)
+    plt.figure(figsize=figsize)
     # Create the magnitude bins
     if isinstance(mag_int, np.ndarray) or isinstance(mag_int, list):
         mag_bins = mag_int
@@ -236,9 +373,11 @@ def plot_magnitude_time_density(catalogue, mag_int, time_int,
     plt.pcolor(time_bins[:-1],
                mag_bins[:-1],
                mag_time_dist.T,
-               norm=LogNorm(vmin=vmin_val, vmax=np.max(mag_time_dist)))
-    plt.xlabel('Time (year)', fontsize='large')
-    plt.ylabel('Magnitude', fontsize='large')
+               norm=LogNorm(vmin=vmin_val, vmax=np.max(mag_time_dist)),
+               cmap = 'YlOrRd',
+               )
+    plt.xlabel('Time (year)', fontsize='medium')
+    plt.ylabel('Magnitude', fontsize='medium')
     plt.xlim(time_bins[0], time_bins[-1])
     plt.colorbar()
     if normalisation:
@@ -303,7 +442,9 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
                             np.log10(cum_rates[out_idx])])
 
 def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
-        filename=None, filetype='png', dpi=300):
+        filename=None, filetype='png', 
+        title=None, dpi=300, figsize=DEFAULT_SIZE, 
+        overlay=False, color=['b','r'], **kwargs):
     """
     Plots the observed recurrence taking into account the completeness
     """
@@ -318,15 +459,18 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
                                                  completeness,
                                                  dmag,
                                                  end_year)
-    plt.figure(figsize=DEFAULT_SIZE)
-    plt.semilogy(recurrence[:, 0], recurrence[:, 1], 'bo')
-    plt.semilogy(recurrence[:, 0], recurrence[:, 2], 'rs')
+    if not overlay:
+        plt.figure(figsize=figsize)
+    plt.semilogy(recurrence[:, 0], recurrence[:, 1], '.', color=color[0], label='Incremental', **kwargs)
+    plt.semilogy(recurrence[:, 0], recurrence[:, 2], '+', color=color[1], label='Cumulative', **kwargs)
     #plt.semilogy(recurrence[:, 0], , 'rs')
     plt.xlim(0.)
     plt.ylim(1e-4, 1e10)
-    plt.xlabel('Magnitude', fontsize='large')
-    plt.ylabel('Annual Rate', fontsize='large')
-    plt.legend(['Incremental', 'Cumulative'])
+    plt.xlabel('Magnitude', fontsize='medium')
+    plt.ylabel('Annual Rate', fontsize='medium')
+    plt.legend(fontsize='small')
+    plt.title(title, fontsize='large')
 
     _save_image(filename, filetype, dpi)
-    plt.show()
+    if not overlay:
+        plt.show()

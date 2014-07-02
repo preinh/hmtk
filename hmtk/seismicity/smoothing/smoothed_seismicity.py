@@ -300,14 +300,15 @@ class SmoothedSeismicity(object):
                                            completeness_table[:, 1],
                                            completeness_table[:, 0],
                                            end_year)
+
         # Get the grid
         self.create_3D_grid(self.catalogue, completeness_table, t_f, mag_inc)
         if config['increment']:
             # Get Hermann adjustment factors
             fval, fival = utils.hermann_adjustment_factors( self.bval,
                                                             completeness_table[0, 1], 
-                                                            config['increment'])
-            print fval, fival, completeness_table[0, 1]
+                                                            config['magnitude_increment'])
+            #print fval, fival, completeness_table[0, 1]
             self.data[:, -1] = fval * fival * self.data[:, -1]
 
         # Apply smoothing

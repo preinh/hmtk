@@ -135,6 +135,8 @@ class smoothing(object):
                                             self._cnn_space_constraint],
                                    full_output=False,
                                    iprint=False)
+
+    
         return i, h, d
 
     
@@ -159,6 +161,8 @@ class smoothing(object):
             #print i, hi, di
             d[i] = di
             h[i] = hi
+                    
+
 
         #print h
         #for each earthquake i
@@ -169,12 +173,12 @@ class smoothing(object):
             # get time: days timedelta
             # TODO: ckeck in the future if dont be exclude 'past' events 
             days = np.array([ (event_time - other_time).days for other_time in T ])
-            print days, len(days)
-            print "opa0"
+            #print days, len(days)
+            #print "opa0"
 
-            days = np.array([ d if d >= 0 else 0 for d in days])
-            #days = np.array([ (event_time - other_time).days if event_time < other_time else 0 for other_time in T ])
-            print "opa1"
+            days = np.array([ d if d >= 0 else -3000 for d in days])
+            #days = np.array([ (event_time - other_time).days if event_time < other_time else -3000 for other_time in T ])
+            print "opa1", i
             print len(days),days
 
             # get distances for each another earthquake
@@ -182,28 +186,35 @@ class smoothing(object):
             _i = distances <= 1.0
             distances[_i] = 1.0
             
-            print "opa02"
-            print len(distances), distances 
+#            print "opa02"
+#            print len(distances), distances 
             # condensed vector [t, r], but exclude exclude the calculation point
             TD = np.array( zip( days.ravel(), distances.ravel() ) )[1:]
 
-            print "opa2"
-            print TD.shape
+#            print "opa2"
+#            print TD.shape
             # compute nearest neighbor tree
             
             # compute each [h, d] by CNN 
-            po.apply_async(wrap_cnn, (self, TD, k, a, i, ), callback=cb_cnn)
-            #hi, di = self.coupled_nearest_neighbor(TD, k, a, tree)
+            #po.apply_async(wrap_cnn, (self, TD, k, a, i, ), callback=cb_cnn)
+            i, hi, di = self.coupled_nearest_neighbor(TD, k, a, i)
         
-#             if self.plot_bandwidth:
-#                 pl.scatter(days, distances, s=50, c='y', marker='x', alpha=0.7)
-#                 pl.ylim(ymin=0)
-#                 pl.axvline(hi)
-#                 pl.axhline(di)
-#                 pl.show()
-#  
-#             d.append(di)
-#             h.append(hi)
+
+            if  i==127 and self.plot_bandwidth:    
+                pl.xkcd()    
+                pl.scatter(days, distances, s=50, c='y', 
+                           marker='o', alpha=0.7, 
+                           facecolor='none', color='black')
+                pl.ylim(ymin=0)
+                pl.xlim(xmin=0)
+                pl.axvline(hi, linestyle='dashed', color='red', label='$h_i$')
+                pl.axhline(di, linestyle='dashed', color='blue', label='$d_i$')
+                pl.title('time and space kernel bandwidth')
+                pl.xlabel('time [days]')
+                pl.ylabel('distances [km]')
+                pl.legend()
+                pl.show()
+
 
         po.close()
         po.join()
@@ -637,8 +648,8 @@ if __name__ == '__main__':
               'catalogue_year_divisor': 2000,
               'target_minimum_magnitude': 3.5,
               'add_before_learning_on_target': True,
-              'log': True,
-              'plot_bandwidth': False,
+              'log': False,
+              'plot_bandwidth': True,
               'plot_rate_timeseries': False,
               'plot_stationary_rate': False,
               'plot_target_events_count': False,
@@ -651,11 +662,11 @@ if __name__ == '__main__':
 #     s.plot_catalogue(s.learning_catalogue, title="Learning Catalogue [1960-2000]")
 #     s.plot_catalogue(s.target_catalogue, title="Target Catalogue U \ ]1960-2000[")
 
-#     res =  s.optimize_seismicity_model()
+    #res =  s.optimize_seismicity_model()
 #     print res
 
-    s.plot_stationary_rate = True
-    s.stationary_rate_model(s.r, s.t, r_min=0.00001, k=5, a=10)
+#    s.plot_stationary_rate = True
+    s.stationary_rate_model(s.r, s.t, r_min=0.00001, k=5, a=300)
     
 #     
 #     

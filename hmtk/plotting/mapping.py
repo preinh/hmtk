@@ -53,27 +53,28 @@ function for plotting the spatial distribution of events
 '''
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.basemap import Basemap
+from mpl_toolkits.basemap import Basemap, cm
 from matplotlib.colors import LogNorm, Normalize
 from openquake.hazardlib.geo.point import Point
 from openquake.hazardlib.geo.line import Line
 from openquake.hazardlib.geo.polygon import Polygon
+from openquake.hazardlib.geo import utils
 from hmtk.sources.area_source import mtkAreaSource
 from hmtk.sources.point_source import mtkPointSource
 from hmtk.sources.simple_fault_source import mtkSimpleFaultSource
 
-DEFAULT_SYMBOLOGY = [(-np.inf, 1., 'k.'), # M < 1
-                     (1., 2., 'g*'), # 1 < M < 2
-                     (2., 3.,'cx'), # 2 < M < 3
-                     (3., 4.,'yd'), # 3 < M < 4
-                     (4., 5.,'m^'), # 4 < M < 5
-                     (5., 6.,'go'), # 5 < M < 6
-                     (6., 7.,'yh'), # 6 < M < 7
-                     (7., 8.,'bs'), # 7 < M < 8
-                     (8., 9.,'k^'), # 8 < M < 9
-                     (9., np.inf,'ro')] # 9 < M < 10
+DEFAULT_SYMBOLOGY = [(-np.inf, 1., 'o', 0.1), # M < 1
+                     (1., 2., 'o',      0.3), # 1 < M < 2
+                     (2., 3.,'o',       0.6), # 2 < M < 3
+                     (3., 4.,'o',       1.8), # 3 < M < 4
+                     (4., 5.,'o',      5), # 4 < M < 5
+                     (5., 6.,'o',      15), # 5 < M < 6
+                     (6., 7.,'o',      30), # 6 < M < 7
+                     (7., 8.,'o',      70), # 7 < M < 8
+                     (8., 9.,'o',     100), # 8 < M < 9
+                     (9., np.inf,'o', 150)] # 9 < M < 10
 
-LEGEND_OFFSET=(1.3, 1.0)
+LEGEND_OFFSET=(0, 0)
 PORTRAIT_ASPECT = (6, 8)
 LANDSCAPE_ASPECT = (8, 6)
 
@@ -146,23 +147,24 @@ class HMTKBaseMap(object):
                               facecolor='w',
                               edgecolor='k')
         if self.title:
-            plt.title(self.title, fontsize=16)
-        parallels = np.arange(0., 90., 2.)
-        meridians = np.arange(0., 360., 2.)
+            plt.title(self.title, fontsize=14)
+        parallels = np.arange(-90., 90., 10.)
+        meridians = np.arange(0., 360., 10.)
 
         # Build Map
         self.m = Basemap(
             llcrnrlon=lowcrnrlon, llcrnrlat=lowcrnrlat,
             urcrnrlon=uppcrnrlon, urcrnrlat=uppcrnrlat,
-            projection='stere', resolution=self.config['resolution'],
+            projection='cyl', resolution=self.config['resolution'],
             area_thresh=1000.0, lat_0=lat0, lon_0=lon0)
-        self.m.drawcountries()
+        self.m.drawcountries(color='0.8')
         self.m.drawmapboundary()
-        self.m.drawcoastlines()
-        self.m.drawstates()
-        self.m.drawparallels(parallels, labels=[1, 0, 0, 0], fontsize=12)
-        self.m.drawmeridians(meridians, labels=[0, 0, 0, 1], fontsize=12)
-        self.m.fillcontinents(color='wheat')
+        self.m.drawcoastlines(color='0.8')
+        self.m.drawstates(color='0.8')
+
+        self.m.drawmeridians(meridians,labels=[1,0,0,1],linewidth=0.0, fontsize=10)
+        self.m.drawparallels(parallels,labels=[1,0,0,1],linewidth=0.0, fontsize=10)
+        #plt.gca().tick_params(labelsize=10)
 
     def savemap(self, filename, filetype='png', papertype="a4"):
         """
@@ -173,7 +175,7 @@ class HMTKBaseMap(object):
                          format=filetype,
                          papertype=papertype)
 
-    def add_catalogue(self, catalogue, overlay=False):
+    def add_catalogue(self, catalogue, overlay=False, marker='o', linewidth=1.5, alpha=0.8, **kwargs):
         '''
 
         :param catalogue:
@@ -202,30 +204,57 @@ class HMTKBaseMap(object):
         max_loc = np.where(np.array([symb[1] for symb in DEFAULT_SYMBOLOGY]) >
                            np.max(catalogue.data['magnitude']))[0][1]
         symbology = DEFAULT_SYMBOLOGY[min_loc:max_loc]
+
+        _d = catalogue.data['depth']
+        d_min = np.min(_d)
+        d_max = np.max(_d)
+       
+        symbology = DEFAULT_SYMBOLOGY[min_loc:max_loc]
+#         color = color[min_loc:max_loc]
+        
         legend_list = []
         leg_handles = []
         for sym in symbology:
             # Create legend string
             if np.isinf(sym[0]):
-                leg_str = 'M < %5.2f' % sym[1]
+                leg_str = 'M < %5.1' % sym[1]
             elif np.isinf(sym[1]):
-                leg_str = 'M >= %5.2f' % sym[0]
+                leg_str = '$M \leq %5.1f$' % sym[0]
             else:
-                leg_str = '%5.2f <= M < %5.2f' %(sym[0], sym[1])
+                leg_str = '$%5.1f \leq M < %5.1f$' %(sym[0], sym[1])
             idx = np.logical_and(catalogue.data['magnitude'] >= sym[0],
                                  catalogue.data['magnitude'] < sym[1])
             mag_size = 1.2 * np.min([sym[0] + 0.5, sym[1] - 0.5])
             x, y = self.m(catalogue.data['longitude'][idx],
                            catalogue.data['latitude'][idx])
-            self.m.plot(x, y, sym[2], markersize=mag_size, label=leg_str)
+            self.m.scatter(x, y, 
+                        s = 3*sym[3],
+                        c = catalogue.data['depth'][idx]+2,
+                        marker=marker, 
+                        facecolor='none',
+                        linewidth=linewidth,
+                        cmap=plt.cm.get_cmap('jet_r'),
+                        alpha=alpha,
+                        label=leg_str,
+                        vmin=d_min, 
+                        vmax=d_max,
+                        zorder=8,
+                        **kwargs)
 
-        plt.legend(bbox_to_anchor=LEGEND_OFFSET)
+
+        plt.legend(fontsize=8)
+        _cb = self.m.colorbar(location='bottom', 
+                              extend='max', 
+                              pad="5%")
+        _cb.ax.tick_params(labelsize=10)
+        _cb.set_label("EQ Depth [km]", fontsize=10)
+
         if self.title:
-            plt.title(self.title, fontsize=16)
+            plt.title(self.title, fontsize=12)
         if not overlay:
             plt.show()
 
-    def _plot_area_source(self, source, border='k-', border_width=1.0):
+    def _plot_area_source(self, source, border='k-', border_width=1.0, plot_label=True, alpha=0.6):
         """
         Plots the area source
         :param source:
@@ -234,9 +263,47 @@ class HMTKBaseMap(object):
             Line properties of border (see matplotlib documentation for detail)
         :param float border_width:
             Line width of border (see matplotlib documentation for detail)
+        :param bool plot_label:
+            If True, the source will labeled with source.name
         """
+        
+        a_val = source.mfd.a_val
+        b_val = source.mfd.b_val
+        m_max = source.mfd.max_mag
+        
         x, y = self.m(source.geometry.lons, source.geometry.lats)
-        self.m.plot(x, y, border, linewidth=border_width)
+        
+        self.m.plot(x, y, border, color='#4a789c', linewidth=border_width, zorder=8, alpha=alpha)
+        
+        if plot_label:
+            bb = utils.get_spherical_bounding_box(source.geometry.lons, source.geometry.lats)
+            x_0, y_0 = utils.get_middle_point(bb[0], bb[2], bb[1], bb[3])
+            text = "a=%.2f, b=%.2f, mmax=%.1f"%(a_val, b_val, m_max)
+#            print x_0,y_0, source.name
+            _ax = plt.gca()
+            if source.name=='co_norte':
+                _ax.annotate(source.name, xy=(x_0,y_0+3),
+                        fontsize=8,#fontweight='bold',
+                        ha='center',va='center',color='#4a789c',
+                        zorder=8,
+                        alpha=alpha)
+                _ax.annotate(text, xy=(x_0,y_0-1.2+3),
+                        fontsize=8,#fontweight='bold',
+                        ha='center',va='center',color='#4a789c',
+                        zorder=8,
+                        alpha=alpha)
+            else:
+                _ax.annotate(source.name, xy=(x_0,y_0),
+                        fontsize=8,#fontweight='bold',
+                        ha='center',va='center',color='#4a789c',
+                        zorder=8,
+                        alpha=alpha)
+                _ax.annotate(text, xy=(x_0,y_0-1.2),
+                        fontsize=8,#fontweight='bold',
+                        ha='center',va='center',color='#4a789c',
+                        zorder=8,
+                        alpha=alpha)
+        #_ax.legend()
 
     def _plot_point_source(self, source, point_marker='ks', point_size=2.0):
         """
@@ -283,6 +350,8 @@ class HMTKBaseMap(object):
             Source model of mixed typologies as instance of :class:
             hmtk.sources.source_model.mtkSourceModel
         """
+        
+        
         for source in model.sources:
             if isinstance(source, mtkAreaSource):
                 self._plot_area_source(source, area_border, border_width)
@@ -296,7 +365,7 @@ class HMTKBaseMap(object):
             plt.show()
 
     def add_colour_scaled_points(self, longitude, latitude, data, shape='s',
-            alpha=1.0, size=20, norm=None, overlay=False):
+            alpha=1.0, size=20, norm=None, overlay=False, linewidth=0.0, **kwargs):
         """
         Overlays a set of points on a map with a fixed size but colour scaled
         according to the data
@@ -324,15 +393,20 @@ class HMTKBaseMap(object):
                        c=data,
                        norm=norm,
                        alpha=alpha,
-                       linewidths=0.0,
-                       zorder=4)
-        self.m.colorbar()
+                       linewidth=linewidth,
+                       zorder=4,
+                       **kwargs)
+        
+        _cb = self.m.colorbar(pad="10%")
+        _cb.ax.tick_params(labelsize='small')
+        _cb.set_label("cluster #", fontsize='small')
+
         if not overlay:
             plt.show()
 
     def add_size_scaled_points(self, longitude, latitude, data, shape='o',
             logplot=False, alpha=1.0, colour='b', smin=2.0, sscale=2.0,
-            overlay=False):
+            overlay=False, **kwargs):
         """
         Plots a set of points with size scaled according to the data
         :param bool logplot:
@@ -351,6 +425,7 @@ class HMTKBaseMap(object):
                        s=(smin + data ** sscale),
                        c=colour,
                        alpha=alpha,
-                       zorder=4)
+                       zorder=4,
+                       **kwargs)
         if not overlay:
             plt.show()
