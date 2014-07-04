@@ -56,26 +56,107 @@ import numpy as np
 from hmtk.seismicity.utils import haversine
 from hmtk.seismicity.smoothing.kernels.base import BaseSmoothingKernel
 
+
+class VereJones_1992(BaseSmoothingKernel):
+    '''
+    Infinite range Kernel function for smoothing intensities
+    '''
+
+    def __init__(self, c, d, D=1.5, r_min=10, r_max=100):
+        self.H = lambda m : c * np.exp(m * d)
+        self.D = D
+        self.r_min = r_min
+        self.r_max = r_max
+        
+        
+    def smooth_data(self):
+        pass
+
+    def kernel(self, M, r):
+        pass
+
+
+
+
+'''
+kernel(mag, x-x0, y-y0) / years....
+
+
+
+pl = fractal_scale_index = 1.5
+dl = deldir = azimutal_concentration = 0.0
+bwida = c = 1.39
+bwidb = d = 1.18
+gmag = M (magnitude)
+
+h = self.H(M)
+
+
+cn = np.pi / (fractal_scale_index - 1.0)
+constant = 1.0/ cn / h / h
+
+normalization_anisotropic_factor =   2*np.pi 
+                                 / ( 2*np.pi + 
+                                     azimutal_concentration*np.pi)
+
+r2 = x*x + y*y
+if r2 < 0.01 : x = 0.01
+alpha_site = np.atan(y,x)
+alpha_quake = theta_tremor * np.pi/180.
+
+if alpha_site > np.pi: alpha_site += -2.0*np.pi
+
+alpha = alpha_site - alpha_quake
+anisotropy = (1. + azimutal_concentration) * np.cos(alpha) * np.cos(alpha)
+anisotropy = normalization_anisotropic_factor * anisotropy
+attenuation = (1.0 + (r2 /h/h))**(-fractal_scale_index) 
+
+return constant * anisotropy * attenuation 
+
+
+'''
+
+    
+    
+class KaganJackson_1994(BaseSmoothingKernel):
+    '''
+    Finite range Kernel
+    '''
+
+    def __init__(self, c, d, D=1.5):
+        self.D = D
+        self.H = lambda m : c * np.exp(m * d)
+
+    def smooth_data(self):
+        pass
+
+    def kernel(self, M, r):
+        pass
+    
+    
+    
+
+
 class Frankel_1995(BaseSmoothingKernel):
     
     def __init__(self, c, d, D=1.5):
         self.D = D
-        self.H = lambda m : c*np.exp(m*d)
+        self.H = lambda m : c * np.exp(m * d)
 
     def smooth_data(self):
         pass
 
     def kernel(self, M, r):
         h = self.H(M)
-        #if r > h: return 0
+        # if r > h: return 0
 
         # K(M, x) = [D/2nh(M)] {h(M)/r}^2-D
-        k = (self.D/2/np.pi/h) * (h / r)**(2 - self.D)
+        k = (self.D / 2 / np.pi / h) * (h / r) ** (2 - self.D)
         
-        #outside_kernel = r > h
-        #k[outside_kernel] = 0
+        # outside_kernel = r > h
+        # k[outside_kernel] = 0
         
-        #print k
+        # print k
         return k
     
     
@@ -125,11 +206,11 @@ class IsotropicGaussianWoo(BaseSmoothingKernel):
             dist_val = haversine(data[:, 1], data[:, 0],
                                  data[iloc, 1], data[iloc, 0])
             if is_3d:
-                dist_val = np.sqrt(dist_val.flatten() ** 2.0 +
+                dist_val = np.sqrt(dist_val.flatten() ** 2.0 + 
                                    (data[:, 2] - data[iloc, 2]) ** 2.0)
 
             id0 = np.where(dist_val <= max_dist)[0]
-            w_val = (np.exp(-(dist_val[id0] ** 2.0) /
+            w_val = (np.exp(-(dist_val[id0] ** 2.0) / 
                             (config['BandWidth'] ** 2.))).flatten()
             smoothed_value[iloc] = np.sum(w_val * data[id0, 3]) / np.sum(w_val)
 
