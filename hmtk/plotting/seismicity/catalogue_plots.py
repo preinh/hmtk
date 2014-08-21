@@ -99,8 +99,9 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
     else:
         plt.ylabel('Count')
     plt.title('Depth Histogram', fontsize='large')
-    plt.show()
+
     _save_image(filename, filetype, dpi)
+    plt.show()
     return
 
 def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
@@ -150,8 +151,9 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
         plt.title('Magnitude-Depth Density', fontsize='large')
     else:
         plt.title('Magnitude-Depth Count', fontsize='large')
-    plt.show()
+
     _save_image(filename, filetype, dpi)
+    plt.show()
     return
 
 def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
@@ -183,8 +185,9 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
     plt.xlabel('Year', fontsize='large')
     plt.ylabel('Magnitude', fontsize='large')
     plt.title('Magnitude-Time Plot', fontsize='large')
-    plt.show()
+
     _save_image(filename, filetype, dpi)
+    plt.show()
     return
 
 def plot_magnitude_time_density(catalogue, mag_int, time_int,
@@ -242,8 +245,9 @@ def plot_magnitude_time_density(catalogue, mag_int, time_int,
         plt.title('Magnitude-Time Density', fontsize='large')
     else:
         plt.title('Magnitude-Time Count', fontsize='large')
-    plt.show()
+
     _save_image(filename, filetype, dpi)
+    plt.show()
     return
 
 
@@ -282,7 +286,8 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
         #print mag_bins[obs_idx], temp_rates
         temp_rates = temp_rates.astype(float) / obs_time[iloc]
         if iloc == n_comp - 1:
-            obs_rates[obs_idx] = temp_rates
+            # TODO This hack seems to fix the error in Numpy v.1.8.1
+            obs_rates[np.where(obs_idx)[0]] = temp_rates
         else:
             obs_rates[obs_idx[:-1]] = temp_rates
     selector = np.where(obs_rates > 0.)[0]
@@ -320,5 +325,6 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
     plt.xlabel('Magnitude', fontsize='large')
     plt.ylabel('Annual Rate', fontsize='large')
     plt.legend(['Incremental', 'Cumulative'])
-    plt.show()
+
     _save_image(filename, filetype, dpi)
+    plt.show()
