@@ -157,7 +157,7 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     return
 
 def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
-        filetype='png', dpi=300, fmt_string='o'):
+        filetype='png', dpi=300, fmt_string='+', completeness_table=None):
     """
     Creates a simple scatter plot of magnitude with time
     :param catalogue:
@@ -182,6 +182,10 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
                      fmt=fmt_string)
     else:
         plt.plot(dtime, catalogue.data['magnitude'], fmt_string)
+        
+    if completeness_table != None:
+        plt.step(completeness_table[:,0], completeness_table[:,1])    
+        
     plt.xlabel('Year', fontsize='large')
     plt.ylabel('Magnitude', fontsize='large')
     plt.title('Magnitude-Time Plot', fontsize='large')
