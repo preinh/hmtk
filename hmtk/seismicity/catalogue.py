@@ -182,7 +182,7 @@ class Catalogue(object):
 #        for i, key in enumerate(keys):
 #            self.data[key] = data_array[:, i]
 
-    def catalogue_mt_filter(self, mt_table, flag=None):
+    def catalogue_mt_filter(self, mt_table, flag=None, reverse=False):
         """
         Filter the catalogue using a magnitude-time table. The table has
         two columns and n-rows.
@@ -198,9 +198,11 @@ class Catalogue(object):
         for comp_val in mt_table:
             id0 = np.logical_and(self.data['year'].astype(float) < comp_val[0],
                                  self.data['magnitude'] < comp_val[1])
-            print id0
+            #print id0
             flag[id0] = False
         if not np.all(flag):
+            if reverse:
+                flag = np.logical_not(flag)
             self.purge_catalogue(flag)
 
     def get_observed_mmax_sigma(self, default=None):

@@ -137,15 +137,18 @@ class HMTKBaseMap(object):
 
         lat0 = lowcrnrlat + ((uppcrnrlat - lowcrnrlat) / 2)
         lon0 = lowcrnrlon + ((uppcrnrlon - lowcrnrlon) / 2)
-        if (uppcrnrlat - lowcrnrlat) >= (uppcrnrlon - lowcrnrlon):
-            fig_aspect = PORTRAIT_ASPECT
-        else:
-            fig_aspect = LANDSCAPE_ASPECT
-        self.fig = plt.figure(num=None,
-                              figsize=fig_aspect,
-                              dpi=self.dpi,
-                              facecolor='w',
-                              edgecolor='k')
+        
+        if ( self.config['embeded'] is None) or not self.config['embeded']:
+            if (uppcrnrlat - lowcrnrlat) >= (uppcrnrlon - lowcrnrlon):
+                fig_aspect = PORTRAIT_ASPECT
+            else:
+                fig_aspect = LANDSCAPE_ASPECT
+            self.fig = plt.figure(num=None,
+                                  figsize=fig_aspect,
+                                  dpi=self.dpi,
+                                  facecolor='w',
+                                  edgecolor='k')
+
         if self.title:
             plt.title(self.title, fontsize=14)
         parallels = np.arange(-90., 90., 10.)
@@ -273,6 +276,10 @@ class HMTKBaseMap(object):
         
         x, y = self.m(source.geometry.lons, source.geometry.lats)
         
+        # repeating the start point
+        x = np.hstack((x,x[0]))
+        y = np.hstack((y,y[0]))
+        
         self.m.plot(x, y, border, color='#4a789c', linewidth=border_width, zorder=8, alpha=alpha)
         
         if plot_label:
@@ -350,7 +357,6 @@ class HMTKBaseMap(object):
             Source model of mixed typologies as instance of :class:
             hmtk.sources.source_model.mtkSourceModel
         """
-        
         
         for source in model.sources:
             if isinstance(source, mtkAreaSource):

@@ -293,7 +293,8 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     return
 
 def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
-        filetype='png', dpi=300, figsize=DEFAULT_SIZE, fmt_string='+', completeness_table=None, **kwargs):
+        filetype='png', dpi=300, figsize=DEFAULT_SIZE, fmt_string='+', 
+        overlay=False, completeness_table=None, **kwargs):
     """
     Creates a simple scatter plot of magnitude with time
     :param catalogue:
@@ -304,7 +305,9 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
     :param str fmt_string:
         Symbology of plot
     """
-    plt.figure(figsize=figsize)
+    if not overlay:
+        plt.figure(figsize=figsize)
+    
     dtime = catalogue.get_decimal_time()
     if len(catalogue.data['sigmaMagnitude']) == 0:
         print 'Magnitude Error is missing - neglecting error bars!'
@@ -318,17 +321,19 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
                      fmt=fmt_string,
                      **kwargs)
     else:
-        plt.plot(dtime, catalogue.data['magnitude'], fmt_string,**kwargs)
+        plt.plot(dtime, catalogue.data['magnitude'], fmt_string, **kwargs)
         
     if completeness_table != None:
-        plt.step(completeness_table[:,0], completeness_table[:,1])
+        plt.step(completeness_table[1:,0], completeness_table[:-1,1], linewidth=2)
         
-    plt.xlabel('Year', fontsize='large')
-    plt.ylabel('Magnitude', fontsize='large')
-    plt.title('Magnitude-Time Plot', fontsize='large')
+    plt.xlabel('Year', fontsize='small')
+    plt.ylabel('Magnitude', fontsize='small')
+    plt.title('Magnitude-Time distribution', fontsize='medium')
 
     _save_image(filename, filetype, dpi)
-    plt.show()
+    if not overlay:
+        plt.show()
+    
     return
 
 def plot_magnitude_time_density(catalogue, mag_int, time_int,
@@ -447,7 +452,7 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
 
 def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
         filename=None, filetype='png', 
-        title=None, dpi=300, figsize=DEFAULT_SIZE, 
+        title="Recurrence [#eq/year]", dpi=300, figsize=DEFAULT_SIZE, 
         overlay=False, color=['b','r'], **kwargs):
     """
     Plots the observed recurrence taking into account the completeness
@@ -465,16 +470,17 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
                                                  end_year)
     if not overlay:
         plt.figure(figsize=figsize)
+        
     plt.semilogy(recurrence[:, 0], recurrence[:, 1], '<', color=color[0], label='Incremental', **kwargs)
     plt.semilogy(recurrence[:, 0], recurrence[:, 2], '>', color=color[1], label='Cumulative', **kwargs)
     #plt.semilogy(recurrence[:, 0], , 'rs')
-    #plt.xlim(0.)
-    #plt.ylim(1e-4, 1e10)
-    plt.ylim(1e-2, 1e2)
-    plt.xlabel('Magnitude', fontsize='medium')
-    plt.ylabel('Annual Rate', fontsize='medium')
+    plt.xlim(0., max(recurrence[:, 0] + 1))
+    plt.ylim(1e-4, 1e10)
+    #plt.ylim(1e-2, 1e2)
+    plt.xlabel('Magnitude', fontsize='small')
+    plt.ylabel('Annual Rate', fontsize='small')
     plt.legend(fontsize='small')
-    plt.title(title, fontsize='large')
+    plt.title(title, fontsize='medium')
 
     _save_image(filename, filetype, dpi)
     if not overlay:
