@@ -324,7 +324,8 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
         plt.plot(dtime, catalogue.data['magnitude'], fmt_string, **kwargs)
         
     if completeness_table != None:
-        plt.step(completeness_table[1:,0], completeness_table[:-1,1], linewidth=2)
+        #plt.step(completeness_table[1:,0], completeness_table[:-1,1], linewidth=2)
+        plt.step(completeness_table[:,0], completeness_table[:,1], where='post', linewidth=2)
         
     plt.xlabel('Year', fontsize='small')
     plt.ylabel('Magnitude', fontsize='small')
@@ -407,6 +408,7 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
     inc = 1E-7
     # Find the natural bin limits
     mag_bins = _get_catalogue_bin_limits(catalogue, dmag)
+    print mag_bins
     obs_time = end_year - completeness[:, 0] + 1.
     obs_rates = np.zeros_like(mag_bins)
     n_comp = np.shape(completeness)[0]
@@ -418,6 +420,7 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
                 catalogue.data['magnitude'] >= low_mag - (dmag / 2.),
                 catalogue.data['year'] >= comp_year)
             high_mag = mag_bins[-1] + dmag
+            print "A-->>", iloc, low_mag, high_mag, comp_year, obs_time[iloc]
             obs_idx = mag_bins >= (low_mag - dmag / 2.)
         else:
             high_mag = completeness[iloc + 1, 1]
@@ -429,14 +432,24 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
                                  catalogue.data['year'] >= comp_year - inc)
             obs_idx = np.logical_and(mag_bins >= low_mag - dmag,
                                      mag_bins < high_mag + dmag)
+            print "B-->>", iloc, low_mag, high_mag, comp_year, obs_time[iloc]
+
+
         temp_rates = np.histogram(catalogue.data['magnitude'][idx],
                                   mag_bins[obs_idx])[0]
-        #print mag_bins[obs_idx], temp_rates
+        print "magnitude bins:", mag_bins[obs_idx]
+        print temp_rates, obs_time[iloc]
         temp_rates = temp_rates.astype(float) / obs_time[iloc]
+        print temp_rates
         if iloc == n_comp - 1:
             obs_rates[obs_idx[:-1]] = temp_rates
         else:
             obs_rates[obs_idx[:-1]] = temp_rates
+        print obs_rates[obs_idx[:-1]]
+        
+            
+    print 60*'-'
+    print obs_rates
     selector = np.where(obs_rates > 0.)[0]
     mag_bins = mag_bins[selector[0]:selector[-1]]
     obs_rates = obs_rates[selector[0]:selector[-1]]
@@ -468,11 +481,12 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
                                                  completeness,
                                                  dmag,
                                                  end_year)
+    print recurrence
     if not overlay:
         plt.figure(figsize=figsize)
         
-    plt.semilogy(recurrence[:, 0], recurrence[:, 1], '<', color=color[0], label='Incremental', **kwargs)
-    plt.semilogy(recurrence[:, 0], recurrence[:, 2], '>', color=color[1], label='Cumulative', **kwargs)
+    plt.semilogy(recurrence[:, 0], recurrence[:, 1], 'x', color=color[0], label='Incremental', **kwargs)
+    plt.semilogy(recurrence[:, 0], recurrence[:, 2], '+', color=color[1], label='Cumulative', **kwargs)
     #plt.semilogy(recurrence[:, 0], , 'rs')
     plt.xlim(0., max(recurrence[:, 0] + 1))
     plt.ylim(1e-4, 1e10)

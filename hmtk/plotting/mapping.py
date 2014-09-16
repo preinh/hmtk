@@ -138,7 +138,7 @@ class HMTKBaseMap(object):
         lat0 = lowcrnrlat + ((uppcrnrlat - lowcrnrlat) / 2)
         lon0 = lowcrnrlon + ((uppcrnrlon - lowcrnrlon) / 2)
         
-        if ( self.config['embeded'] is None) or not self.config['embeded']:
+        if not self.config.get('embeded', False):
             if (uppcrnrlat - lowcrnrlat) >= (uppcrnrlon - lowcrnrlon):
                 fig_aspect = PORTRAIT_ASPECT
             else:
@@ -269,10 +269,15 @@ class HMTKBaseMap(object):
         :param bool plot_label:
             If True, the source will labeled with source.name
         """
-        
-        a_val = source.mfd.a_val
-        b_val = source.mfd.b_val
-        m_max = source.mfd.max_mag
+        if source.mfd != None:
+            a_val = source.mfd.a_val
+            b_val = source.mfd.b_val
+            m_max = source.mfd.max_mag
+        else:
+            a_val = 0.1
+            b_val = 1
+            m_max = 10
+            
         
         x, y = self.m(source.geometry.lons, source.geometry.lats)
         
