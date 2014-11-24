@@ -120,7 +120,7 @@ class SmoothedSeismicityWoo(object):
         self.kernel = None
 
 
-    def add_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
+    def optimize_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
 
         H = lambda m, c, d: c * np.exp(d*m)
 
@@ -131,10 +131,10 @@ class SmoothedSeismicityWoo(object):
         self.d = d
         return None
     
-        m = self.catalogue.data['magnitude']
-        self.catalogue.data['bandwidth'] = H(m, c, d)
-        
-        return None
+#         m = self.catalogue.data['magnitude']
+#         self.catalogue.data['bandwidth'] = H(m, c, d)
+#         
+#         return None
 
     def _get_bandwidth_data(self, magnitude_bin=0.5):
 
@@ -258,12 +258,13 @@ class SmoothedSeismicityWoo(object):
         return observation_time
     
 
-    def run_analysis(self, catalogue, config, completeness_table=None, smoothing_kernel=IsotropicGaussianWoo):
+    def run_analysis(self, catalogue, config, completeness_table = None, smoothing_kernel = IsotropicGaussianWoo):
         '''
         Runs an analysis of smoothed seismicity in the manner
         originally implemented by Frankel (1995)
  
-        :param catalogue:
+        :param catalogue:ls
+        
             Instance of the hmtk.seismicity.catalogue.Catalogue class
             catalogue.data dictionary containing the following -
             'year' - numpy.ndarray vector of years
@@ -299,13 +300,15 @@ class SmoothedSeismicityWoo(object):
         self.catalogue = catalogue
         self.completeness_table = completeness_table
         self.config = config
-        self.add_bandwith_values()
+        self.optimize_bandwith_values()
  
         year = catalogue.end_year
         
+        
+        ## TODO attention
         ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
                                                        catalogue, 
-                                                       magnitude_increment=mag_bin)
+                                                       magnitude_increment = mag_bin)
         grid = self._create_grid(use3d=use3d)
 
         x = grid[:,0]
