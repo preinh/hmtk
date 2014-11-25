@@ -253,7 +253,7 @@ class SmoothedSeismicityWoo(object):
         _mt = min(ct[i,1])  # min of these values
         i = np.where(ct[:,1] == _mt) # index of
 
-        observation_time = last_year - ct[i, 0][0][0] # corresponding year
+        observation_time = last_year - ct[i,0][0][0] # corresponding year
 
         return observation_time
     
@@ -304,16 +304,24 @@ class SmoothedSeismicityWoo(object):
  
         year = catalogue.end_year
         
-        
         ## TODO attention
         ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
                                                        catalogue, 
                                                        magnitude_increment = mag_bin)
+        
+        gmag = ct[:,1]
+        obs_time = ct[0,0] - ct[:,0] + 1
+        v1 = gmag.reshape((1, gmag.shape[0])).T
+        v2 = obs_time.reshape((1, obs_time.shape[0])).T
+        print np.hstack([v1, v2])
+
         grid = self._create_grid(use3d=use3d)
 
         x = grid[:,0]
         y = grid[:,1]
 
+        return None
+        
         distances = haversine(x, 
                               y, 
                               catalogue.data['longitude'],
