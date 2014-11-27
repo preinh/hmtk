@@ -195,7 +195,6 @@ class Catalogue(object):
         for comp_val in mt_table:
             id0 = np.logical_and(self.data['year'].astype(float) < comp_val[0],
                                  self.data['magnitude'] < comp_val[1])
-            print id0
             flag[id0] = False
         if not np.all(flag):
             self.purge_catalogue(flag)

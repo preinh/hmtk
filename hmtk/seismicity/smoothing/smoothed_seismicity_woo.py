@@ -50,6 +50,7 @@ a general class for implementing seismicity smoothing algorithms
 import csv
 import numpy as np
 
+from copy import deepcopy
 from math import log
 
 from hmtk.seismicity.smoothing import utils
@@ -125,8 +126,11 @@ class SmoothedSeismicityWoo(object):
         H = lambda m, c, d: c * np.exp(d*m)
 
         
-        _data = self._get_bandwidth_data()         # mags, mean_minimum_pairwise_distance
-        c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
+        # mags, mean_minimum_pairwise_distance
+        _data = self._get_bandwidth_data(magnitude_bin = magnitude_bin) 
+        # optimize H(m)
+        c, c_err, d, d_err = self._fit_bandwidth_data(_data)     
+
         self.c = c
         self.d = d
         return None
@@ -141,20 +145,27 @@ class SmoothedSeismicityWoo(object):
         # pegar catálogo corrigido pela completude
 
         # get data
-        X = self.catalogue.data['magnitude']
+        M = self.catalogue.data['magnitude']
         
-        min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(X)
-        max_magnitude = max(X)
+        dmag = magnitude_bin/2.
+        
+        min_magnitude = self.config['min_magnitude']
+        min_magnitude = min_magnitude if min_magnitude else min(M)
+        max_magnitude = max(M)
 
         # divide bins catalog_bins
-        bins = np.arange(min_magnitude, max_magnitude + magnitude_bin, magnitude_bin)
+        magnitudes = np.arange(min_magnitude, 
+                               max_magnitude + magnitude_bin, 
+                               magnitude_bin)
+        #print magnitudes
 
         h , m = [], []
-        for b in bins:
-            _i = np.logical_and(X > b, X < b + magnitude_bin)
+        for mag in magnitudes:
+            _i = np.logical_and(M  > mag - dmag, 
+                                M <= mag + dmag)
             #print b
             #print X[_i]
-            if len(X[_i]) > 0:
+            if len(M[_i]) > 1:
                 # calculate distances on bin
                 from hmtk.seismicity.utils import haversine
                 d = haversine(self.catalogue.data['longitude'][_i], 
@@ -162,12 +173,15 @@ class SmoothedSeismicityWoo(object):
                               self.catalogue.data['longitude'][_i], 
                               self.catalogue.data['latitude'][_i])
                 
-                # média das distancias mínimas e centro do magnitude_bin
-                m.append(b + magnitude_bin/ 2.)  
-                h.append(np.sort(d)[:,1].mean()) 
+                # mean nearest distance [km] into this magnitude_bin
+                _h = np.sort(d)[:,1].mean()
+                
+                # accumulate
+                m.append(mag)
+                h.append(_h) 
         
-        return {'distance' : h, 
-                'magnitude': m }
+        return {'distances' : h, 
+                'magnitudes': m }
             
         pass
     
@@ -175,14 +189,15 @@ class SmoothedSeismicityWoo(object):
         from scipy import optimize 
         
         #powerlaw = lambda x, amp, index: amp * (x**index)
-        powerlaw = lambda m, c, d: c * np.exp(m*d)
+        #powerlaw = lambda m, c, d: c * np.exp(m*d)
         
         #  y     = a * exp(m*d)
         #  ln(y) = ln(a) + b*m
         
-        h = np.log(data['distance'])
-        m = np.array(data['magnitude'])
-        h_err = 0.01*np.ones(len(h))
+        h = np.log(data['distances'])
+        m = np.array(data['magnitudes'])
+        default_error = 0.01
+        h_err = default_error*np.ones(len(h))
         
         #print h, m
         
@@ -249,16 +264,22 @@ class SmoothedSeismicityWoo(object):
     def _get_observation_time(self, m, completeness_table, last_year):
         ct = completeness_table
 
-        i = ct[:,1] >= m    # all values after desired mag...
-        _mt = min(ct[i,1])  # min of these values
-        i = np.where(ct[:,1] == _mt) # index of
-
-        observation_time = last_year - ct[i,0][0][0] # corresponding year
+        try:
+            i = ct[:,1] > m    # all values after desired mag...
+            _mt = min(ct[i,1])  # min of these values
+            i = np.where(ct[:,1] == _mt)# index of
+    
+            observation_time = last_year - ct[i,0][0][0] + 1 # corresponding year
+        except:
+            observation_time = last_year - ct[-1,0] + 1
 
         return observation_time
     
 
-    def run_analysis(self, catalogue, config, completeness_table = None, smoothing_kernel = IsotropicGaussianWoo):
+    def run_analysis(self, 
+                     catalogue, 
+                     config, 
+                     smoothing_kernel = IsotropicGaussianWoo):
         '''
         Runs an analysis of smoothed seismicity in the manner
         originally implemented by Frankel (1995)
@@ -275,15 +296,14 @@ class SmoothedSeismicityWoo(object):
  
         :param dict config:
             Configuration settings of the algorithm:
-            * 'Length_Limit' - Maximum number of bandwidths for use in
-                               smoothing (Float)
+            * 'Length_Limit' - Maximum number of bandwidths for use in smoothing
+                               (Float)
             * 'BandWidth' - Bandwidth (km) of the Smoothing Kernel (Float)
-            * 'increment' - Output incremental (True) or cumulative a-value
+            * 'increment' - Output incremental (True) or cumulative a-value 
                             (False)
- 
-        :param np.ndarray completeness_table:
-            Completeness of the catalogue assuming evenly spaced magnitudes
-            from most recent bin to oldest bin [year, magnitude]
+            * 'completeness_table' - Completeness of the catalogue assuming 
+                                     evenly spaced magnitudes from most recent 
+                                     bin to oldest bin [year, magnitude]
  
         :param smoothing_kernel:
             Smoothing kernel as instance of :class:
@@ -293,33 +313,62 @@ class SmoothedSeismicityWoo(object):
             Full smoothed seismicity data as np.ndarray, of the form
             [Longitude, Latitude, Depth, Observed, Smoothed]
         '''
+
+        self.config = config
+
         use3d = config['use3d']
         nh = config['bandwidth_h_limit']
         mag_bin = config['magnitude_bin']
         
-        self.catalogue = catalogue
-        self.completeness_table = completeness_table
-        self.config = config
-        self.optimize_bandwith_values()
- 
-        year = catalogue.end_year
+        # this catalogue will be changed...
+        self.completeness_table = config['completeness_table']
+        self.catalogue = deepcopy(catalogue)
+
+        print self.completeness_table
+        self.catalogue.catalogue_mt_filter(self.completeness_table)
+
+        last_observation = self.catalogue.end_year
+
+        _m = self.catalogue.data['magnitude']
+        _t = self.catalogue.data['year']
         
+        _t2 = self.completeness_table[:,0]
+        _m2 = self.completeness_table[:,1]
+        
+        self.optimize_bandwith_values(magnitude_bin=mag_bin)
+        print "h(m) = %.2f * exp(%.2f * m)"%(self.c, self.d)
+ 
         ## TODO attention
-        ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
-                                                       catalogue, 
+        ct, dm = utils.get_even_magnitude_completeness(self.completeness_table, 
+                                                       self.catalogue, 
                                                        magnitude_increment = mag_bin)
         
-        gmag = ct[:,1]
-        obs_time = ct[0,0] - ct[:,0] + 1
-        v1 = gmag.reshape((1, gmag.shape[0])).T
-        v2 = obs_time.reshape((1, obs_time.shape[0])).T
-        print np.hstack([v1, v2])
-
+        
+#         import matplotlib.pyplot as plt
+#          
+#         plt.scatter(_m, _t)
+#         plt.step(_m2, _t2, color='red')
+#         plt.show()
+#         gmag = np.arange(self.config['min_magnitude'], 
+#                          max(self.catalogue.data['magnitude']) + mag_bin,
+#                          mag_bin)
+#         
+#         for _m in gmag:
+#             print _m, self._get_observation_time(_m, 
+#                                                  self.completeness_table, 
+#                                                  last_observation)
+        
         grid = self._create_grid(use3d=use3d)
 
         x = grid[:,0]
         y = grid[:,1]
 
+        # they are the CELL's CENTER POINT !!!
+        print x[0], y[0]
+        print x[-1], y[-1]
+
+        # now, avoid this implementation to follow woo's original one.
+        
         return None
         
         distances = haversine(x, 
@@ -328,8 +377,8 @@ class SmoothedSeismicityWoo(object):
                               catalogue.data['latitude'])
                 
         M = self.catalogue.data['magnitude']
-        
-        min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(M)
+        min_magnitude = self.config['min_magnitude']
+        min_magnitude = min_magnitude if min_magnitude else min(M)
         max_magnitude = max(M)
         
         # divide bins catalog_bins

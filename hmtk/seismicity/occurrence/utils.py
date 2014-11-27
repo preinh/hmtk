@@ -125,19 +125,20 @@ def input_checks(catalogue, config, completeness):
         # use default reference magnitude of 0.0 and magnitude interval of 0.1
         ref_mag = 0.0
         dmag = 0.1
-        config = {'reference_magnitude': None,
-                  'magnitude_interval': 0.1}
+        config = {'reference_magnitude': ref_mag,
+                  'magnitude_interval': dmag}
     else:
         if (not 'reference_magnitude' in config.keys()) or\
             (config['reference_magnitude'] is None):
             ref_mag = 0.
-            config['reference_magnitude'] = None
+            config['reference_magnitude'] = ref_mag
         else:
             ref_mag = config['reference_magnitude']
 
         if (not 'magnitude_interval' in config.keys()) or \
             not config['magnitude_interval']:
             dmag = 0.1
+            config['magnitude_interval'] = dmag
         else:
             dmag = config['magnitude_interval']
 
