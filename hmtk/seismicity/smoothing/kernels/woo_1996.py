@@ -56,6 +56,90 @@ import numpy as np
 from hmtk.seismicity.utils import haversine
 from hmtk.seismicity.smoothing.kernels.base import BaseSmoothingKernel
 
+# integration method
+from scipy.integrate import dblquad
+
+
+def gaussian_2d(x, y, s):
+    normalization_factor = 1./2./np.pi/s/s
+    exponent = (-1./2.)*(x*x/s/s + y*y/s/s)
+    return normalization_factor*np.exp(exponent)
+
+
+def powerlaw_2d(x, y, s, decaiment = 1.5):
+    normalization_factor = s/2./np.pi
+    denominator = (x*x + y*y + s*s)**(decaiment)
+    #return normalization_factor*(1.0/denominator)
+    return normalization_factor/denominator
+
+
+def infinite_2d(x, y, h, a = 1.5):
+    h2 = h*h
+    return ((a - 1.)/np.pi)*h2*((1 + x*x + y*y)/h2)**(-a)
+# 
+#     # 
+#       rad = np.pi/180.0
+# C H is the bandwidth of the kernel
+#       H = BWIDA*EXP(BWIDB*GMAG)
+#       CN = PI/(PL-1.0)
+#       H2 =H*H
+#       CONST = 1.0/(CN*H2)
+# C CANG is the normalization for the anisotropic factor ANISO
+#       CANG = 2.0*PI/( 2.0*PI + DL(IQ)*PI )
+#       R2 = X*X + Y*Y
+#       IF (R2.LT.0.01) X = 0.01
+#       ANG1 = ATAN2(Y,X)
+#       ANG2 = TH(IQ)*RAD
+#       IF (ANG2.GT.PI) ANG2 = -2.0*PI + ANG2
+# C ANG is the orientation of the site with respect to the lineament
+#       ANG = ANG1 - ANG2
+#       ANISO = (1.0+DL(IQ)*COS(ANG)*COS(ANG)) * CANG   
+#       ATTEN = (1.0 + (R2/H2))**(-PL)
+#       AKER = CONST*ANISO*ATTEN
+
+    
+class spatial_kernel(object):
+    
+    def __init__(self, 
+                 x0, y0,
+                 bandwidth,
+                 kernel_type = 'gaussian_2d',
+                 parameters = None):
+        self.x0 = x0
+        self.y0 = y0
+        
+        self.h = bandwidth
+
+        if kernel_type == 'gaussian_2d':
+            f = gaussian_2d
+        elif kernel_type == 'powerlaw_2d':
+            f = powerlaw_2d
+        elif kernel_type == 'infinite_2d':
+            f = infinite_2d
+                        
+        self.f = f
+
+
+    def integrate(self, x_min, x_max,
+                        y_min, y_max,
+                        absolute_epsilon = 1e-10):
+
+        x0 = x_min - self.x0
+        xf = x_max - self.x0
+
+        # need to be calable of 
+        y0 = lambda x: y_min - self.y0
+        yf = lambda x: y_max - self.y0
+
+        value, error = dblquad(self.f, 
+                               x0, xf,
+                               y0, yf,
+                               args=(self.h,), 
+                               epsabs=absolute_epsilon)
+        return value 
+        
+
+
 class Frankel_1995(BaseSmoothingKernel):
     
     def __init__(self, c, d, D=1.75):
