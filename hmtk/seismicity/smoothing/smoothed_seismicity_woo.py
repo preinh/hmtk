@@ -444,11 +444,11 @@ class SmoothedSeismicityWoo(object):
                                                        magnitude_increment = mag_bin)
         
         
-#        import matplotlib.pyplot as plt
-#          
-#         plt.scatter(_m, _t)
-#         plt.step(_m2, _t2, color='red')
-#         plt.show()
+        import matplotlib.pyplot as plt
+          
+        plt.scatter(_m, _t, marker='+')
+        plt.step(_m2, _t2, color='red')
+        plt.show()
 #         gmag = np.arange(self.config['min_magnitude'], 
 #                          max(self.catalogue.data['magnitude']) + mag_bin,
 #                          mag_bin)
