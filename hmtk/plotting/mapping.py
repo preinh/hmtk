@@ -4,46 +4,46 @@
 #
 # LICENSE
 #
-# Copyright (c) 2010-2014, GEM Foundation, G. Weatherill, M. Pagani, 
+# Copyright (c) 2010-2014, GEM Foundation, G. Weatherill, M. Pagani,
 # D. Monelli., L. E. Rodriguez-Abreu
 #
-# The Hazard Modeller's Toolkit is free software: you can redistribute 
-# it and/or modify it under the terms of the GNU Affero General Public 
-# License as published by the Free Software Foundation, either version 
+# The Hazard Modeller's Toolkit is free software: you can redistribute
+# it and/or modify it under the terms of the GNU Affero General Public
+# License as published by the Free Software Foundation, either version
 # 3 of the License, or (at your option) any later version.
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>
 #
 # DISCLAIMER
-# 
-# The software Hazard Modeller's Toolkit (hmtk) provided herein 
-# is released as a prototype implementation on behalf of 
-# scientists and engineers working within the GEM Foundation (Global 
-# Earthquake Model). 
 #
-# It is distributed for the purpose of open collaboration and in the 
+# The software Hazard Modeller's Toolkit (hmtk) provided herein
+# is released as a prototype implementation on behalf of
+# scientists and engineers working within the GEM Foundation (Global
+# Earthquake Model).
+#
+# It is distributed for the purpose of open collaboration and in the
 # hope that it will be useful to the scientific, engineering, disaster
-# risk and software design communities. 
-# 
-# The software is NOT distributed as part of GEM's OpenQuake suite 
-# (http://www.globalquakemodel.org/openquake) and must be considered as a 
-# separate entity. The software provided herein is designed and implemented 
-# by scientific staff. It is not developed to the design standards, nor 
-# subject to same level of critical review by professional software 
-# developers, as GEM's OpenQuake software suite.  
-# 
-# Feedback and contribution to the software is welcome, and can be 
-# directed to the hazard scientific staff of the GEM Model Facility 
-# (hazard@globalquakemodel.org). 
-# 
-# The Hazard Modeller's Toolkit (hmtk) is therefore distributed WITHOUT 
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or 
-# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License 
+# risk and software design communities.
+#
+# The software is NOT distributed as part of GEM's OpenQuake suite
+# (http://www.globalquakemodel.org/openquake) and must be considered as a
+# separate entity. The software provided herein is designed and implemented
+# by scientific staff. It is not developed to the design standards, nor
+# subject to same level of critical review by professional software
+# developers, as GEM's OpenQuake software suite.
+#
+# Feedback and contribution to the software is welcome, and can be
+# directed to the hazard scientific staff of the GEM Model Facility
+# (hazard@globalquakemodel.org).
+#
+# The Hazard Modeller's Toolkit (hmtk) is therefore distributed WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
 # for more details.
-# 
-# The GEM Foundation, and the authors of the software, assume no 
-# liability for use of the software. 
+#
+# The GEM Foundation, and the authors of the software, assume no
+# liability for use of the software.
 
 #!/usr/bin/env/python
 
@@ -137,7 +137,7 @@ class HMTKBaseMap(object):
 
         lat0 = lowcrnrlat + ((uppcrnrlat - lowcrnrlat) / 2)
         lon0 = lowcrnrlon + ((uppcrnrlon - lowcrnrlon) / 2)
-        
+
         if not self.config.get('embeded', False):
             if (uppcrnrlat - lowcrnrlat) >= (uppcrnrlon - lowcrnrlon):
                 fig_aspect = PORTRAIT_ASPECT
@@ -211,10 +211,10 @@ class HMTKBaseMap(object):
         _d = catalogue.data['depth']
         d_min = np.min(_d)
         d_max = np.max(_d)
-       
+
         symbology = DEFAULT_SYMBOLOGY[min_loc:max_loc]
 #         color = color[min_loc:max_loc]
-        
+
         legend_list = []
         leg_handles = []
         for sym in symbology:
@@ -230,24 +230,24 @@ class HMTKBaseMap(object):
             mag_size = 1.2 * np.min([sym[0] + 0.5, sym[1] - 0.5])
             x, y = self.m(catalogue.data['longitude'][idx],
                            catalogue.data['latitude'][idx])
-            self.m.scatter(x, y, 
+            self.m.scatter(x, y,
                         s = 3*sym[3],
                         c = catalogue.data['depth'][idx]+2,
-                        marker=marker, 
+                        marker=marker,
                         facecolor='none',
                         linewidth=linewidth,
                         cmap=plt.cm.get_cmap('jet_r'),
                         alpha=alpha,
                         label=leg_str,
-                        vmin=d_min, 
+                        vmin=d_min,
                         vmax=d_max,
                         zorder=8,
                         **kwargs)
 
 
         plt.legend(fontsize=8)
-        _cb = self.m.colorbar(location='bottom', 
-                              extend='max', 
+        _cb = self.m.colorbar(location='bottom',
+                              extend='max',
                               pad="5%")
         _cb.ax.tick_params(labelsize=10)
         _cb.set_label("EQ Depth [km]", fontsize=10)
@@ -277,16 +277,16 @@ class HMTKBaseMap(object):
             a_val = 0.1
             b_val = 1
             m_max = 10
-            
-        
+
+
         x, y = self.m(source.geometry.lons, source.geometry.lats)
-        
+
         # repeating the start point
         x = np.hstack((x,x[0]))
         y = np.hstack((y,y[0]))
-        
+
         self.m.plot(x, y, border, color='#4a789c', linewidth=border_width, zorder=8, alpha=alpha)
-        
+
         if plot_label:
             bb = utils.get_spherical_bounding_box(source.geometry.lons, source.geometry.lats)
             x_0, y_0 = utils.get_middle_point(bb[0], bb[2], bb[1], bb[3])
@@ -362,7 +362,7 @@ class HMTKBaseMap(object):
             Source model of mixed typologies as instance of :class:
             hmtk.sources.source_model.mtkSourceModel
         """
-        
+
         for source in model.sources:
             if isinstance(source, mtkAreaSource):
                 self._plot_area_source(source, area_border, border_width)
@@ -407,7 +407,7 @@ class HMTKBaseMap(object):
                        linewidth=linewidth,
                        zorder=4,
                        **kwargs)
-        
+
         _cb = self.m.colorbar(pad="10%")
         _cb.ax.tick_params(labelsize='small')
         _cb.set_label("cluster #", fontsize='small')

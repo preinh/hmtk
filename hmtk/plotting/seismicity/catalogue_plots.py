@@ -101,7 +101,7 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
             **kwargs)
 
     plt.gca().invert_yaxis()
-    
+
     plt.ylabel('Depth (km)', fontsize='medium')
     if normalisation:
         plt.xlabel('Probability Density Function', fontsize='medium')
@@ -114,7 +114,7 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
     return
 
 def plot_weekday_histogram(catalogue, normalisation=True,
-        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE,
         **kwargs):
     """
     Creates a histogram of the depths in the catalogue
@@ -129,10 +129,10 @@ def plot_weekday_histogram(catalogue, normalisation=True,
         To sample depth uncertainty choose number of samples
     """
     plt.figure(figsize=figsize)
-    
+
 #     print min(catalogue.data['day']), max(catalogue.data['day'])
 #     print min(catalogue.data['month']), max(catalogue.data['month'])
-    
+
     t = zip(catalogue.data['year'],  catalogue.data['month'], catalogue.data['day'])
     d = [ date(t[0], t[1], t[2]).isoweekday() for t in t ]
 
@@ -155,7 +155,7 @@ def plot_weekday_histogram(catalogue, normalisation=True,
 
 
 def plot_hour_histogram(catalogue, normalisation=True,
-        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+        filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE,
         **kwargs):
     """
     Creates a histogram of the depths in the catalogue
@@ -170,7 +170,7 @@ def plot_hour_histogram(catalogue, normalisation=True,
         To sample depth uncertainty choose number of samples
     """
     plt.figure(figsize=figsize)
-    
+
     bins = np.arange(0.5, 24, 1)
     plt.hist(catalogue.data['hour'], bins=bins, normed=normalisation, **kwargs)
     plt.hlines((1/24.),xmin=0, xmax=24, linestyles='dashed', **kwargs)
@@ -188,9 +188,9 @@ def plot_hour_histogram(catalogue, normalisation=True,
     return
 
 
-def plot_rate(catalogue, normalisation = False, cumulative=False, 
+def plot_rate(catalogue, normalisation = False, cumulative=False,
               new_figure=True, overlay=False,
-              filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE, 
+              filename=None, filetype='png', dpi=300, figsize=DEFAULT_SIZE,
               **kwargs):
     """
     Creates a histogram of the depths in the catalogue
@@ -206,20 +206,20 @@ def plot_rate(catalogue, normalisation = False, cumulative=False,
     """
     if new_figure:
         plt.figure(figsize=figsize)
-    
+
     Y = catalogue.data['year']
     max_year = np.max(Y)
     min_year = np.min(Y)
-    
-    
+
+
     bins = np.arange(min_year - .5, max_year + 1.5, 1)
 
-    plt.hist(catalogue.data['year'], bins=bins, 
+    plt.hist(catalogue.data['year'], bins=bins,
              histtype='step',
-             normed = normalisation, 
+             normed = normalisation,
              cumulative = cumulative,
              **kwargs)
-        
+
 #    plt.plot(_e, _h, marker=None, linestyle='-', **kwargs)
 
     plt.xlim(min_year, max_year)
@@ -293,7 +293,7 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     return
 
 def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
-        filetype='png', dpi=300, figsize=DEFAULT_SIZE, fmt_string='+', 
+        filetype='png', dpi=300, figsize=DEFAULT_SIZE, fmt_string='+',
         overlay=False, completeness_table=None, **kwargs):
     """
     Creates a simple scatter plot of magnitude with time
@@ -307,7 +307,7 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
     """
     if not overlay:
         plt.figure(figsize=figsize)
-    
+
     dtime = catalogue.get_decimal_time()
     if len(catalogue.data['sigmaMagnitude']) == 0:
         print 'Magnitude Error is missing - neglecting error bars!'
@@ -322,11 +322,11 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
                      **kwargs)
     else:
         plt.plot(dtime, catalogue.data['magnitude'], fmt_string, **kwargs)
-        
+
     if completeness_table != None:
         #plt.step(completeness_table[1:,0], completeness_table[:-1,1], linewidth=2)
         plt.step(completeness_table[:,0], completeness_table[:,1], where='post', linewidth=2)
-        
+
     plt.xlabel('Year', fontsize='small')
     plt.ylabel('Magnitude', fontsize='small')
     plt.title('Magnitude-Time distribution', fontsize='medium')
@@ -334,7 +334,7 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
     _save_image(filename, filetype, dpi)
     if not overlay:
         plt.show()
-    
+
     return
 
 def plot_magnitude_time_density(catalogue, mag_int, time_int,
@@ -454,8 +454,8 @@ def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
                             np.log10(cum_rates[out_idx])])
 
 def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
-        filename=None, filetype='png', 
-        title="Recurrence [#eq/year]", dpi=300, figsize=DEFAULT_SIZE, 
+        filename=None, filetype='png',
+        title="Recurrence [#eq/year]", dpi=300, figsize=DEFAULT_SIZE,
         overlay=False, color=['b','r'], **kwargs):
     """
     Plots the observed recurrence taking into account the completeness
@@ -473,11 +473,12 @@ def plot_observed_recurrence(catalogue, completeness, dmag, end_year=None,
                                                  end_year)
     if not overlay:
         plt.figure(figsize=figsize)
-        
-    plt.semilogy(recurrence[:, 0], recurrence[:, 1], 'o', color=color[0], label='Incremental', **kwargs)
-    plt.semilogy(recurrence[:, 0], recurrence[:, 2], 's', color=color[1], label='Cumulative', **kwargs)
-    plt.xlim(0., max(recurrence[:, 0] + 1))
-    plt.ylim(1e-4, 1e10)
+
+    plt.semilogy(recurrence[:, 0], recurrence[:, 1], '<', color=color[0], label='Incremental', **kwargs)
+    plt.semilogy(recurrence[:, 0], recurrence[:, 2], '>', color=color[1], label='Cumulative', **kwargs)
+    #plt.xlim(0., max(recurrence[:, 0] + 1))
+    plt.xlim(min(recurrence[:, 0] - 0.5), max(recurrence[:, 0] + 0.5))
+    #plt.ylim(1e-4, 1e10)
     #plt.ylim(1e-2, 1e2)
     plt.xlabel('Magnitude', fontsize='small')
     plt.ylabel('Annual Rate', fontsize='small')

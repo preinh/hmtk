@@ -124,17 +124,17 @@ class SmoothedSeismicityWoo(object):
 
     def add_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
 
-        # rs(m) = 1.340e0.6m (Espagne, E) (9.9) 
+        # rs(m) = 1.340e0.6m (Espagne, E) (9.9)
         # rs(m) = 0.048e1.55m (Norvege, N) (9.10)
-       
+
         # mags, mean_minimum_pairwise_distance
-        _data = self._get_bandwidth_data()         
+        _data = self._get_bandwidth_data()
         c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
         self.c = c
         self.d = d
 
         if self.config['plot_bandwidth_fit']:
-            plt.xkcd()
+            #plt.xkcd()
             H = lambda m, c, d: c * np.exp(d*m)
             m = self.catalogue.data['magnitude']
             #self.catalogue.data['bandwidth'] = H(m, c, d)
@@ -142,7 +142,7 @@ class SmoothedSeismicityWoo(object):
             plt.semilogy(m, H(m, 1.34, 0.60), color='#F0E797', label='Spain [$h(m)=1.34e^{0.60m}$]')
             plt.semilogy(m, H(m, 0.05, 1.55), color='#FF9D84', label='Norway [$h(m)=0.05e^{1.55m}$]')
             plt.semilogy(_data['magnitude'], _data['distance'], linewidth=0, marker='o', color='#FF5460')
-            plt.title("bandwidth function [woo1996]")
+            plt.title("BSB2014.11 bandwidth function [woo1996]")
             plt.xlabel('$m$ [magnitude]')
             plt.ylabel('$h(m)$ [distance]')
             plt.legend(loc='lower right') # , fontsize='small')
@@ -158,7 +158,7 @@ class SmoothedSeismicityWoo(object):
 
         # get data
         X = self.catalogue.data['magnitude']
-        
+
         min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(X)
         max_magnitude = max(X)
 
@@ -173,69 +173,69 @@ class SmoothedSeismicityWoo(object):
             if len(X[_i]) > 0:
                 # calculate distances on bin
                 from hmtk.seismicity.utils import haversine
-                d = haversine(self.catalogue.data['longitude'][_i], 
+                d = haversine(self.catalogue.data['longitude'][_i],
                               self.catalogue.data['latitude'][_i],
-                              self.catalogue.data['longitude'][_i], 
+                              self.catalogue.data['longitude'][_i],
                               self.catalogue.data['latitude'][_i])
-                
+
                 # média das distancias mínimas e centro do magnitude_bin
-                m.append(b + magnitude_bin/ 2.)  
-                h.append(np.sort(d)[:,1].mean()) 
-        
-        return {'distance' : h, 
+                m.append(b + magnitude_bin/ 2.)
+                h.append(np.sort(d)[:,1].mean())
+
+        return {'distance' : h,
                 'magnitude': m }
-            
+
         pass
-    
+
     def _fit_bandwidth_data(self, data):
-        from scipy import optimize 
-        
+        from scipy import optimize
+
         #powerlaw = lambda x, amp, index: amp * (x**index)
         powerlaw = lambda m, c, d: c * np.exp(m*d)
-        
+
         #  y     = a * exp(m*d)
         #  ln(y) = ln(a) + b*m
-        
+
         h = np.log(data['distance'])
         m = np.array(data['magnitude'])
         h_err = 0.10*np.ones(len(h))
-        
+
         #print h, m
-        
+
         # define our 'line' fitting function
         fitfunc = lambda p, x: p[0] + p[1] * x
         errfunc = lambda p, x, y, err: (y - fitfunc(p, x)) / err
-        
-        
+
+
         # fit exponential data
         p_init = [1.0, 1.0]
         out = optimize.leastsq(errfunc, p_init, args=(m, h, h_err), full_output=1)
-        
+
         p_final = out[0]
         covar = out[1]
         #print p_final
-        #print covar        
-        
+        #print covar
+
         d = p_final[1]
         c = np.exp(p_final[0])
-        
+
         d_err = np.sqrt( covar[0][0] )
         c_err = np.sqrt( covar[1][1] ) * c
-            
+
         return c, c_err, d, d_err
 
     def _seismicity_rate(self, m=None, r=None):
-        
-        
-        
+
+
+
         k = Frankel_1995()
-        #print 
+        #print
         # sum kernel(m, r)  / completeness_time(m)
-        pass 
+        pass
 
 
 #     def _grid2d(self, x1, x2):
-#         return 
+#         return
 
     def _create_grid(self, use3d=False):
         l = self.grid_limits
@@ -243,15 +243,15 @@ class SmoothedSeismicityWoo(object):
         dx = l['xspc']
         dy = l['yspc']
         dz = l['zspc']
-        
-        x = np.arange(l['xmin'] + dx/2., l['xmax'], dx) 
-        y = np.arange(l['ymin'] + dy/2., l['ymax'], dy) 
+
+        x = np.arange(l['xmin'] + dx/2., l['xmax'], dx)
+        y = np.arange(l['ymin'] + dy/2., l['ymax'], dy)
         z = np.arange(l['zmin'] + dz/2., l['zmax'], dz)
-        
+
 #         print min(x), max(x)
 #         print min(y), max(y)
 #         print min(z), max(z)
-        
+
         if not use3d:
             #spacement = [dx, dy]
             xx, yy= np.meshgrid(x, y)
@@ -262,10 +262,10 @@ class SmoothedSeismicityWoo(object):
             xx, yy, zz = np.meshgrid(x, y, z)
             x, y, z = xx.flatten(), yy.flatten(), zz.flatten()
             cells = np.array(zip(x,y,z))
-        
+
         return cells #, spacement
-        
-        
+
+
     def _get_observation_time(self, m, completeness_table, last_year):
         ct = completeness_table
 
@@ -276,16 +276,16 @@ class SmoothedSeismicityWoo(object):
         observation_time = last_year - ct[i, 0][0][0] # corresponding year
 
         return observation_time
-    
+
 
     def run_analysis(self, catalogue, config, completeness_table=None, smoothing_kernel=IsotropicGaussianWoo):
         '''
         Runs an analysis of smoothed seismicity in the manner
         originally implemented by Frankel (1995)
- 
+
         :param catalogue:
             Instance of the hmtk.seismicity.catalogue.Catalogue class
- 
+
         :param dict config:
             Configuration settings of the algorithm:
             * 'Length_Limit' - Maximum number of bandwidths for use in
@@ -293,15 +293,15 @@ class SmoothedSeismicityWoo(object):
             * 'BandWidth' - Bandwidth (km) of the Smoothing Kernel (Float)
             * 'increment' - Output incremental (True) or cumulative a-value
                             (False)
- 
+
         :param np.ndarray completeness_table:
             Completeness of the catalogue assuming evenly spaced magnitudes
             from most recent bin to oldest bin [year, magnitude]
- 
+
         :param smoothing_kernel:
             Smoothing kernel as instance of :class:
                 hmtk.seismicity.smoothing.kernels.base.BaseSmoothingKernel
- 
+
         :returns:
             Full smoothed seismicity data as np.ndarray, of the form
             [Longitude, Latitude, Depth, Observed, Smoothed]
@@ -309,19 +309,19 @@ class SmoothedSeismicityWoo(object):
         use3d = config['use3d']
         nh = config['bandwidth_h_limit']
         mag_bin = config['magnitude_bin']
-        
+
         self.catalogue = catalogue
         self.completeness_table = completeness_table
         self.config = config
         self.add_bandwith_values()
- 
+
         year = catalogue.end_year
-        
+
         # get magnitude-completeness table for each magnitude
-        ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
-                                                       catalogue, 
+        ct, dm = utils.get_even_magnitude_completeness(completeness_table,
+                                                       catalogue,
                                                        magnitude_increment=mag_bin)
-        
+
         # create grid
         grid = self._create_grid(use3d=use3d)
 
@@ -329,27 +329,27 @@ class SmoothedSeismicityWoo(object):
         y = grid[:,1]
 
         # distances from grid to epicenters
-        distances = haversine(x, 
-                              y, 
+        distances = haversine(x,
+                              y,
                               catalogue.data['longitude'],
                               catalogue.data['latitude'])
-                
+
         M = self.catalogue.data['magnitude']
-        
+
         min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(M)
         max_magnitude = max(M)
-        
+
         # divide bins catalog_bins
         mags = np.arange(min_magnitude, max_magnitude + dm, dm)
         # get observation time for each magnitude
-        time = year - ct[:,0] 
+        time = year - ct[:,0]
 
 # TODO refactor
         # not properly a kernel but some auxiliar function
         # C and D parameters was calculated by [add_bandwith_values]
         k = Frankel_1995(self.c, self.d)
-        
-        # use it to max influence distance for each magnitude 
+
+        # use it to max influence distance for each magnitude
         r_max = k.H(mags) * nh
         #_d = []
         self.data = []
@@ -358,38 +358,38 @@ class SmoothedSeismicityWoo(object):
             # get distances from cell to each epicenter
             r = distances[i,:]
             rates=[]
-            # for each magnitude bin 
+            # for each magnitude bin
             for (m, t, limit) in zip(mags + dm/2, time, r_max):
-                
+
                 # indexes for filtered magnitude
                 a = np.logical_and( M >= m - dm/2., M < m + dm/2.)
                 # and influence kernel zone
                 b = np.logical_and(r <= limit, r > 0 )
                 _i = np.logical_and(a, b)
-                
+
 #                 if m <= 4.25:
 #                     print r[_i]
-                
+
                 # TODO HERE could be the place to get not
                 # the value @ cell's center but the
                 # integral over cell if the epic are in outside of cell
                 # or get value @ cell-center when it is in the cell.
                 # check with helmstetter code or using woo code.
-                
+
                 # get kernel values
-                _k = k.kernel(m, r[_i]) / t 
-                
+                _k = k.kernel(m, r[_i]) / t
+
                 # and sum
                 rates.append(_k.sum())
-            
+
             # lon, lat, depth, m0, dm, ...
             self.data.append([c[0], c[1], 0, min_magnitude, dm, rates])
- 
+
 #         from matplotlib import pylab as plt
 #         #print _d
 #         plt.hist(r, bins=30)
 #         plt.show()
-#         
+#
         return self.data
 
 
@@ -430,7 +430,7 @@ class SmoothedSeismicityWoo(object):
         # Write to file
         writer.writerow(headers)
         for row in self.data:
-            # a = log10(alpha*m_min) + b*m_min 
+            # a = log10(alpha*m_min) + b*m_min
             _a0 = np.log10(sum(row[5])*row[3]) + self.bval*row[3]
             row_dict = {'Longitude': '%.5f' % row[0],
                         'Latitude': '%.5f' % row[1],
