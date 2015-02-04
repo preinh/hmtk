@@ -60,6 +60,7 @@ from hmtk.seismicity.occurrence.utils import input_checks
     bvalue=1.0,
     itstab=1E-5,
     maxiter=1000)
+
 class Weichert(SeismicityOccurrence):
     '''Class to Implement Weichert Algorithm'''
 

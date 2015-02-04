@@ -57,7 +57,12 @@ from openquake.hazardlib.geo.polygon import Polygon
 from hmtk.seismicity.smoothing import utils
 from hmtk.seismicity.smoothing.kernels.isotropic_gaussian import \
     IsotropicGaussian
+from hmtk.seismicity.smoothing.kernels.woo_1996 import \
+    IsotropicGaussianWoo, Frankel_1995
+
 from hmtk.registry import CatalogueFunctionRegistry
+
+from hmtk.seismicity.utils import haversine
 
 
 class Grid(collections.OrderedDict):
@@ -522,10 +527,730 @@ SMOOTHED_SEISMICITY_METHODS = CatalogueFunctionRegistry()
     Length_Limit=np.float,
     BandWidth=np.float,
     increment=bool)
+
 class IsotropicGaussianMethod(object):
     def run(self, catalogue, config, completeness=None):
         ss = SmoothedSeismicity(config['grid_limits'],
                                 config['use_3d'],
                                 config['b_value'])
         return ss.run_analysis(
+            catalogue, config, completeness_table=completeness)
+
+
+
+
+
+class SmoothedSeismicityWoo(object):
+    '''
+    Class to implement an analysis of Smoothed Seismicity, including the
+    grid counting of data and the smoothing.
+
+    :param np.ndarray grid:
+        Observed count in each cell [Long., Lat., Depth., Count]
+
+    :param catalogue:
+        Valid instance of the :class: hmtk.seismicity.catalogue.Catalogue
+
+    :param bool use_3d:
+        Decide if analysis is 2-D (False) or 3-D (True). If 3-D then distances
+        will use hypocentral distance, otherwise epicentral distance
+
+    :param float bval:
+        b-value
+
+    :param float beta:
+        Beta value for exponential form (beta = bval * log(10.))
+
+    :param np.ndarray data:
+        Smoothed seismicity output
+
+    :param dict grid_limits:
+        Limits ot the grid used for defining the cells
+    '''
+
+    def __init__(self, grid_limits, use_3d=False, bvalue=None):
+        '''
+        Instatiate class with a set of grid limits
+        :param grid_limits:
+            It could be a float (in that case the grid is computed from the
+            catalogue with the given spacing).
+
+            Or an array of the form:
+            [xmin, xmax, spcx, ymin, ymax, spcy, zmin, spcz]
+
+        :param bool use_3d:
+            Choose whether to use hypocentral distances for smoothing or only
+            epicentral
+
+        :param float bval:
+            b-value for analysis
+        '''
+        self.grid = None
+        self.catalogue = None
+        self.use_3d = use_3d
+        self.bval = bvalue
+        if self.bval:
+            self.beta = self.bval * log(10.)
+        else:
+            self.beta = None
+        self.data = None
+
+        self.grid_limits = grid_limits
+        self.kernel = None
+
+    def add_bandwith_values(self, min_magnitude=None, max_magnitude=None, magnitude_bin=0.5):
+
+        H = lambda m, c, d: c * np.exp(d*m)
+
+        
+        _data = self._get_bandwidth_data()         # mags, mean_minimum_pairwise_distance
+        c, c_err, d, d_err = self._fit_bandwidth_data(_data)     # optimize H(m)
+        self.c = c
+        self.d = d
+
+        m = self.catalogue.data['magnitude']
+        self.catalogue.data['bandwidth'] = H(m, c, d)
+        
+        return None
+
+    def _get_bandwidth_data(self, magnitude_bin=0.5):
+
+        # pegar catálogo corrigido pela completude
+
+        # get data
+        X = self.catalogue.data['magnitude']
+        
+        if not self.config['min_magnitude']:
+            min_magnitude = min(X)
+        else:
+            min_magnitude = self.config['min_magnitude']
+        
+        if not self.config['max_magnitude']:
+            max_magnitude = max(X)
+        else:
+            max_magnitude = self.config['max_magnitude']
+            
+
+        # divide bins catalog_bins
+        bins = np.arange(min_magnitude, max_magnitude + magnitude_bin, magnitude_bin)
+
+        h , m = [], []
+        for b in bins:
+            _i = np.logical_and(X > b, X < b + magnitude_bin)
+            #print b
+            #print X[_i]
+            if len(X[_i]) > 0:
+                # calculate distances on bin
+                from hmtk.seismicity.utils import haversine
+                d = haversine(self.catalogue.data['longitude'][_i], 
+                              self.catalogue.data['latitude'][_i],
+                              self.catalogue.data['longitude'][_i], 
+                              self.catalogue.data['latitude'][_i])
+                
+                # média das distancias mínimas e centro do magnitude_bin
+                m.append(b + magnitude_bin/ 2.)  
+                h.append(np.sort(d)[:,1].mean()) 
+        
+        return {'distance' : h, 
+                'magnitude': m }
+    
+        #from matplotlib import pylab as pl
+        #pl.scatter(m, np.log(h))
+        #pl.show()
+
+        
+        pass
+    
+    def _fit_bandwidth_data(self, data):
+        from scipy import optimize 
+        
+        #powerlaw = lambda x, amp, index: amp * (x**index)
+        powerlaw = lambda m, c, d: c * np.exp(m*d)
+        
+        #  y     = a * exp(m*d)
+        #  ln(y) = ln(a) + b*m
+        
+        h = np.log(data['distance'])
+        m = np.array(data['magnitude'])
+        h_err = 0.01*np.ones(len(h))
+        
+        #print h, m
+        
+        # define our 'line' fitting function
+        fitfunc = lambda p, x: p[0] + p[1] * x
+        errfunc = lambda p, x, y, err: (y - fitfunc(p, x)) / err
+        
+        
+        # fit exponential data
+        p_init = [1.0, 1.0]
+        out = optimize.leastsq(errfunc, p_init, args=(m, h, h_err), full_output=1)
+        
+        p_final = out[0]
+        covar = out[1]
+        #print p_final
+        #print covar        
+        
+        d = p_final[1]
+        c = np.exp(p_final[0])
+        
+        d_err = np.sqrt( covar[0][0] )
+        c_err = np.sqrt( covar[1][1] ) * c
+        
+#         import pylab as pl
+#         pl.plot(m, np.log(powerlaw(m, c, d)))              # Fit
+#         pl.errorbar(m, h, yerr=h_err, fmt='k.')    # Data
+#         pl.text(5.5, 5.0, 'a = %5.3f +/- %5.3f' % (c, c_err))
+#         pl.text(5.5, 4.5, 'b = %5.3f +/- %5.3f' % (d, d_err))
+#         pl.title('Woo global bandwidth function [ H(m) = a*exp(b*m) ]')
+#         pl.ylabel('ln(H) [distance]')
+#         pl.xlabel('m [magnitudes]')
+#         pl.show()
+#         #savefig('power_law_fit.png')
+    
+        return c, c_err, d, d_err
+
+    def _seismicity_rate(self, m=None, r=None):
+        
+        
+        
+        k = Frankel_1995()
+        #print 
+        # sum kernel(m, r)  / completeness_time(m)
+        pass 
+
+
+#     def _grid2d(self, x1, x2):
+#         return 
+
+    def _create_grid(self, use3d=False):
+        l = self.grid_limits
+
+        dx = l['xspc']
+        dy = l['yspc']
+        dz = l['zspc']
+        
+        x = np.arange(l['xmin'] + dx/2., l['xmax'], dx) 
+        y = np.arange(l['ymin'] + dy/2., l['ymax'], dy) 
+        z = np.arange(l['zmin'] + dz/2., l['zmax'], dz)
+        
+        spacement = []
+        cells = []
+        if not use3d:
+            spacement = [dx, dy]
+            for x_i in x:
+                for y_i in y:
+                    cells.append((x_i, y_i))
+
+        else:
+            spacement = [dx, dy, dz]
+            for x_i in x:
+                for y_i in y:
+                    for z_i in z:
+                        cells.append((x_i, y_i, z_i))
+
+
+        cells = np.array(cells)
+        
+        return cells, spacement
+
+#         exit()
+# 
+#         if use3d:
+#             
+#             xx, yy, zz = np.meshgrid(x, y, z)
+#         else:
+#             xx, yy = np.meshgrid(x, y)
+
+        
+        #from matplotlib import pylab
+        #from mpl_toolkits.mplot3d import Axes3D
+        
+        #f = pylab.figure()
+        #ax = Axes3D(f)
+        
+        #ax.scatter(xx, yy, zz)
+        #pylab.show()
+        #xx, yy, zz = np.meshgrid(x, y, z)
+        #print xx, yy, zz
+        #for z in z:
+#         print len(xx)
+#         X = xx, yy
+#         for i in range(len(xx)-1):
+#             for j in range(len(yy)-1):
+#                 print xx[i, j], yy[i, j] 
+        
+        
+    def _get_observation_time(self, m, completeness_table, last_year):
+        ct = completeness_table
+
+        i = ct[:,1] >= m    # all values after desired mag...
+        _mt = min(ct[i,1])  # min of these values
+        i = np.where(ct[:,1] == _mt) # index of
+
+        observation_time = last_year - ct[i, 0][0][0] # corresponding year
+
+        return observation_time
+    
+
+    def run_analysis(self, catalogue, config, completeness_table=None, smoothing_kernel=IsotropicGaussianWoo):
+        '''
+        Runs an analysis of smoothed seismicity in the manner
+        originally implemented by Frankel (1995)
+ 
+        :param catalogue:
+            Instance of the hmtk.seismicity.catalogue.Catalogue class
+            catalogue.data dictionary containing the following -
+            'year' - numpy.ndarray vector of years
+            'longitude' - numpy.ndarray vector of longitudes
+            'latitude' - numpy.ndarray vector of latitudes
+            'depth' - numpy.ndarray vector of depths
+            'magnitude' - numpy.ndarray vector of magnitudes
+ 
+        :param dict config:
+            Configuration settings of the algorithm:
+            * 'Length_Limit' - Maximum number of bandwidths for use in
+                               smoothing (Float)
+            * 'BandWidth' - Bandwidth (km) of the Smoothing Kernel (Float)
+            * 'increment' - Output incremental (True) or cumulative a-value
+                            (False)
+ 
+        :param np.ndarray completeness_table:
+            Completeness of the catalogue assuming evenly spaced magnitudes
+            from most recent bin to oldest bin [year, magnitude]
+ 
+        :param smoothing_kernel:
+            Smoothing kernel as instance of :class:
+                hmtk.seismicity.smoothing.kernels.base.BaseSmoothingKernel
+ 
+        :returns:
+            Full smoothed seismicity data as np.ndarray, of the form
+            [Longitude, Latitude, Depth, Observed, Smoothed]
+        '''
+        config['min_magnitude']
+        
+        self.catalogue = catalogue
+        self.completeness_table = completeness_table
+        self.config = config
+        self.add_bandwith_values()
+ 
+        use3d=config['use3d']
+        cells, spacement = self._create_grid(use3d=use3d)
+        k = Frankel_1995(self.c, self.d)
+        
+        ct, dm = utils.get_even_magnitude_completeness(completeness_table, 
+                                                       catalogue, 
+                                                       magnitude_increment=0.5)
+
+        last_year = catalogue.end_year
+                
+        # get data
+        X = self.catalogue.data['magnitude']
+        magnitude_bin = dm
+        
+        min_magnitude = self.config['min_magnitude'] if self.config['min_magnitude'] else min(X)
+        max_magnitude = self.config['max_magnitude'] if self.config['max_magnitude'] else max(X)
+        
+        # divide bins catalog_bins
+        bins = np.arange(min_magnitude, max_magnitude + magnitude_bin, magnitude_bin)
+
+        h , m = [], []
+        for b in bins:
+            _h = k.H(b + magnitude_bin/2.) * self.config['bandwidth_h_limit']
+            _m = b + magnitude_bin/2.
+
+            observation_time = self._get_observation_time(_m, ct, last_year)
+  
+            fid = open('/Users/pirchiner/Desktop/tmp_woo.%s.csv'%_m, 'wt')
+            # Create header list
+            header_info = ['Longitude', 'Latitude', 'Depth', 'Magnitude','Rate']
+            writer = csv.DictWriter(fid, fieldnames=header_info)
+            headers = dict((name0, name0) for name0 in header_info)
+            # Write to file
+            writer.writerow(headers)
+            
+            _i = np.logical_and( X >= _m - magnitude_bin/2., 
+                                 X  < _m + magnitude_bin/2.)
+            
+            print _m, observation_time
+
+            for c in cells:
+                x0 = c[0]
+                y0 = c[1]
+                z0 = 0 if not use3d else c[2]  
+    
+                r = haversine(np.array(x0), 
+                              np.array(y0), 
+                              catalogue.data['longitude'][_i],
+                              catalogue.data['latitude'][_i])
+                #print _h
+                _j = np.logical_and(0 < r, r <= _h)
+                #print len(r), len(_j)
+                r = r[_j]
+
+                _k = k.kernel(_m, r) / observation_time
+                
+                rate = _k.sum()
+                
+                #print len(_k), _k.sum()
+                #print x0, y0, _m, _k.sum()
+                row_dict = {'Longitude': '%.5f' % x0,
+                            'Latitude': '%.5f' % y0,
+                            'Depth': '%.3f' % 0,
+                            'Magnitude': '%.5e' % _m,
+                            'Rate': '%.5e' % rate }
+                writer.writerow(row_dict)
+
+            fid.close()
+
+            
+            #print X[_i]
+#             if len(X[_i]) > 0:
+#                 # calculate distances on bin
+#                 from hmtk.seismicity.utils import haversine
+#                 d = haversine(self.catalogue.data['longitude'][_i], 
+#                               self.catalogue.data['latitude'][_i],
+#                               self.catalogue.data['longitude'][_i], 
+#                               self.catalogue.data['latitude'][_i])
+#                 
+#                 # média das distancias mínimas e centro do magnitude_bin
+#                 m.append(b + magnitude_bin/ 2.)  
+#                 h.append(np.sort(d)[:,1].mean()) 
+        
+        
+        
+        
+        #print ct[:,1]
+
+        
+
+            #print r.shape
+            #print k.kernel(5, r)
+
+            #print x0, y0
+            
+        
+        #print last_year, spacement, cells
+        
+        
+        #_idx = 
+        #observation_time = 
+        
+        #print self.catalogue.data['bandwidth']
+#         magnitudes = []
+#         
+#         for i, m in enumerate(magnitudes):
+#             r = np.array([self.catalogue.data['lat'][i], self.catalogue.data['lon'][i], self.catalogue.data['depth'][i]])
+#             l = self._seismicity_rate(m, r)
+            
+        
+        # para cada celula do grid
+        #    calcular a taxa anual de sismicidade
+        #    _lamba(m, x) = sum(  K(m, x - x_i) / T(x_i)  )
+
+
+
+
+
+#     def run_analysis(self, catalogue, config, completeness_table=None,
+#                      smoothing_kernel=None):
+#         '''
+#         Runs an analysis of smoothed seismicity in the manner
+#         originally implemented by Frankel (1995)
+# 
+#         :param catalogue:
+#             Instance of the hmtk.seismicity.catalogue.Catalogue class
+#             catalogue.data dictionary containing the following -
+#             'year' - numpy.ndarray vector of years
+#             'longitude' - numpy.ndarray vector of longitudes
+#             'latitude' - numpy.ndarray vector of latitudes
+#             'depth' - numpy.ndarray vector of depths
+#             'magnitude' - numpy.ndarray vector of magnitudes
+# 
+#         :param dict config:
+#             Configuration settings of the algorithm:
+#             * 'Length_Limit' - Maximum number of bandwidths for use in
+#                                smoothing (Float)
+#             * 'BandWidth' - Bandwidth (km) of the Smoothing Kernel (Float)
+#             * 'increment' - Output incremental (True) or cumulative a-value
+#                             (False)
+# 
+#         :param np.ndarray completeness_table:
+#             Completeness of the catalogue assuming evenly spaced magnitudes
+#             from most recent bin to oldest bin [year, magnitude]
+# 
+#         :param smoothing_kernel:
+#             Smoothing kernel as instance of :class:
+#                 hmtk.seismicity.smoothing.kernels.base.BaseSmoothingKernel
+# 
+#         :returns:
+#             Full smoothed seismicity data as np.ndarray, of the form
+#             [Longitude, Latitude, Depth, Observed, Smoothed]
+#         '''
+# 
+#         self.catalogue = catalogue
+#         if smoothing_kernel:
+#             self.kernel = smoothing_kernel
+#         else:
+#             self.kernel = IsotropicGaussian()
+# 
+#         # If no grid limits are specified then take from catalogue
+#         if isinstance(self.grid_limits, list):
+#             self.grid_limits = Grid.make_from_list(self.grid_limits)
+#             assert self.grid_limits['xmax'] >= self.grid_limits['xmin']
+#             assert self.grid_limits['xspc'] > 0.0
+#             assert self.grid_limits['ymax'] >= self.grid_limits['ymin']
+#             assert self.grid_limits['yspc'] > 0.0
+#         elif isinstance(self.grid_limits, float):
+#             self.grid_limits = Grid.make_from_catalogue(
+#                 self.catalogue, self.grid_limits,
+#                 config['Length_Limit'] * config['BandWidth'])
+# 
+#         # reshape the magnitude completeness table with one entry per magnitude bin 
+#         completeness_table, mag_inc = utils.get_even_magnitude_completeness(
+#             completeness_table,
+#             self.catalogue,
+#             magnitude_increment = config['MagnitudeBinSize'])
+# 
+#         end_year = self.catalogue.end_year
+# 
+#         # Get Weichert factor
+#         t_f, _ = utils.get_weichert_factor(self.beta,
+#                                            completeness_table[:, 1],
+#                                            completeness_table[:, 0],
+#                                            end_year)
+#         
+#         # Get the grid (every time in 3d ?!?!?!)
+#         self.create_3D_grid(self.catalogue, completeness_table, t_f, mag_inc)
+# 
+#         if config['increment']:
+#             # Get Hermann adjustment factors
+#             fval, fival = utils.hermann_adjustment_factors(
+#                 self.bval,
+#                 completeness_table[0, 1], config['increment'])
+#             self.data[:, -1] = fval * fival * self.data[:, -1]
+# 
+# 
+#         # Apply smoothing from kernel !!!
+#         smoothed_data, sum_data, sum_smooth = self.kernel.smooth_data(
+#             self.data, config, self.use_3d)
+# 
+#         
+#         print 'Smoothing Total Rate Comparison - ' \
+#             'Observed: %.6e, Smoothed: %.6e' % (sum_data, sum_smooth)
+# 
+#         self.data = np.column_stack([self.data, smoothed_data])
+#         return self.data
+
+#     def create_2D_grid_simple(self, longitude, latitude, year, magnitude,
+#                               completeness_table, t_f=1., mag_inc=0.1):
+#         '''
+#         Generates the grid from the limits using an approach closer to that of
+#         Frankel (1995)
+#         :param numpy.ndarray longitude:
+#             Vector of earthquake longitudes
+# 
+#         :param numpy.ndarray latitude:
+#             Vector of earthquake latitudes
+# 
+#         :param numpy.ndarray year:
+#             Vector of earthquake years
+# 
+#         :param numpy.ndarray magnitude:
+#             Vector of earthquake magnitudes
+# 
+#         :param numpy.ndarray completeness_table:
+#             Completeness table
+# 
+#         :param float t_f:
+#             Weichert adjustment factor
+# 
+# 
+#         :returns:
+#            Two-dimensional spatial grid of observed rates
+# 
+#         '''
+#         assert mag_inc > 0.
+# 
+#         xlim = np.ceil(
+#             (self.grid_limits['xmax'] - self.grid_limits['xmin']) /
+#             self.grid_limits['xspc'])
+#         ylim = np.ceil(
+#             (self.grid_limits['ymax'] - self.grid_limits['ymin']) /
+#             self.grid_limits['yspc'])
+#         ncolx = int(xlim)
+#         ncoly = int(ylim)
+#         grid_count = np.zeros(ncolx * ncoly, dtype=float)
+#         for iloc in range(0, len(longitude)):
+#             dlon = (longitude[iloc] - self.grid_limits['xmin']) /\
+#                 self.grid_limits['xspc']
+#             if (dlon < 0.) or (dlon > xlim):
+#                 # Earthquake outside longitude limits
+#                 continue
+#             xcol = int(dlon)
+#             if xcol == ncolx:
+#                 # If longitude is directly on upper grid line then retain
+#                 xcol = ncolx - 1
+#             dlat = fabs(self.grid_limits['ymax'] - latitude[iloc]) /\
+#                 self.grid_limits['yspc']
+#             if (dlat < 0.) or (dlat > ylim):
+#                 # Earthquake outside latitude limits
+#                 continue
+#             ycol = int(dlat)  # Correct for floating precision
+#             if ycol == ncoly:
+#                 # If latitude is directly on upper grid line then retain
+#                 ycol = ncoly - 1
+#             kmarker = (ycol * int(xlim)) + xcol
+#             adjust = _get_adjustment(magnitude[iloc],
+#                                      year[iloc],
+#                                      completeness_table[0, 1],
+#                                      completeness_table[:, 0],
+#                                      t_f,
+#                                      mag_inc)
+#             if adjust:
+#                 grid_count[kmarker] = grid_count[kmarker] + adjust
+#         return grid_count
+# 
+#     def create_3D_grid(self, catalogue, completeness_table, t_f=1.0,
+#                        mag_inc=0.1):
+#         '''
+#         Counts the earthquakes observed in a three dimensional grid
+# 
+# 
+#         :param catalogue:
+#             Instance of the hmtk.seismicity.catalogue.Catalogue class
+#             catalogue.data dictionary containing the following -
+#             'year' - numpy.ndarray vector of years
+#             'longitude' - numpy.ndarray vector of longitudes
+#             'latitude' - numpy.ndarray vector of latitudes
+#             'depth' - numpy.ndarray vector of depths
+# 
+#         :param np.ndarray completeness_table:
+#             Completeness of the catalogue assuming evenly spaced magnitudes
+#             from most recent bin to oldest bin [year, magnitude]
+# 
+#         :param float t_f:
+#             Weichert adjustment factor
+# 
+#         :param float mag_inc:
+#             Increment of the completeness magnitude (rendered 0.1)
+# 
+#         :returns:
+#            Three-dimensional spatial grid of observed rates (or two dimensional
+#            if only one depth layer is considered)
+# 
+#         '''
+#         x_bins = np.arange(self.grid_limits['xmin'],
+#                            self.grid_limits['xmax'],
+#                            self.grid_limits['xspc'])
+#         if x_bins[-1] < self.grid_limits['xmax']:
+#             x_bins = np.hstack([x_bins, x_bins[-1] + self.grid_limits['xspc']])
+# 
+#         y_bins = np.arange(self.grid_limits['ymin'],
+#                            self.grid_limits['ymax'],
+#                            self.grid_limits['yspc'])
+#         if y_bins[-1] < self.grid_limits['ymax']:
+#             y_bins = np.hstack([y_bins, y_bins[-1] + self.grid_limits['yspc']])
+# 
+#         z_bins = np.arange(self.grid_limits['zmin'],
+#                            self.grid_limits['zmax'] + self.grid_limits['zspc'],
+#                            self.grid_limits['zspc'])
+# 
+#         if z_bins[-1] < self.grid_limits['zmax']:
+#             z_bins = np.hstack([z_bins, z_bins[-1] + self.grid_limits['zspc']])
+# 
+#         # Define centre points of grid cells
+#         gridx, gridy = np.meshgrid((x_bins[1:] + x_bins[:-1]) / 2.,
+#                                    (y_bins[1:] + y_bins[:-1]) / 2.)
+# 
+#         n_x, n_y = np.shape(gridx)
+#         gridx = np.reshape(gridx, [n_x * n_y, 1])
+#         gridy = np.reshape(np.flipud(gridy), [n_x * n_y, 1])
+# 
+#         # Only one depth range
+#         idx = np.logical_and(catalogue.data['depth'] >= z_bins[0],
+#                              catalogue.data['depth'] < z_bins[1])
+#         mid_depth = (z_bins[0] + z_bins[1]) / 2.
+# 
+#         data_grid = np.column_stack([
+#             gridx,
+#             gridy,
+#             mid_depth * np.ones(n_x * n_y, dtype=float),
+#             self.create_2D_grid_simple(catalogue.data['longitude'][idx],
+#                                        catalogue.data['latitude'][idx],
+#                                        catalogue.data['year'][idx],
+#                                        catalogue.data['magnitude'][idx],
+#                                        completeness_table,
+#                                        t_f,
+#                                        mag_inc)])
+# 
+#         if len(z_bins) < 3:
+#             # Only one depth range
+#             self.data = data_grid
+#             return
+# 
+#         # Multiple depth layers - append to grid
+#         for iloc in range(1, len(z_bins) - 1):
+#             idx = np.logical_and(catalogue.data['depth'] >= z_bins[iloc],
+#                                  catalogue.data['depth'] < z_bins[iloc + 1])
+#             mid_depth = (z_bins[iloc] + z_bins[iloc + 1]) / 2.
+# 
+#             temp_grid = np.column_stack([
+#                 gridx,
+#                 gridy,
+#                 mid_depth * np.ones(n_x * n_y, dtype=float),
+#                 self.create_2D_grid_simple(catalogue.data['longitude'][idx],
+#                                            catalogue.data['latitude'][idx],
+#                                            catalogue.data['year'][idx],
+#                                            catalogue.data['magnitude'][idx],
+#                                            completeness_table,
+#                                            t_f,
+#                                            mag_inc)])
+# 
+#             data_grid = np.vstack([data_grid, temp_grid])
+#         self.data = data_grid
+
+    def write_to_csv(self, filename):
+        '''
+        Exports to simple csv
+        :param str filename:
+            Path to file for export
+        '''
+        fid = open(filename, 'wt')
+        # Create header list
+        header_info = ['Longitude', 'Latitude', 'Depth', 'Observed Count',
+                       'Smoothed Rate', 'b-value']
+        writer = csv.DictWriter(fid, fieldnames=header_info)
+        headers = dict((name0, name0) for name0 in header_info)
+        # Write to file
+        writer.writerow(headers)
+        for row in self.data:
+            row_dict = {'Longitude': '%.5f' % row[0],
+                        'Latitude': '%.5f' % row[1],
+                        'Depth': '%.3f' % row[2],
+                        'Observed Count': '%.5e' % row[3],
+                        'Smoothed Rate': '%.5e' % row[4],
+                        'b-value': '%.4f' % self.bval}
+            writer.writerow(row_dict)
+        fid.close()
+
+
+
+
+
+@SMOOTHED_SEISMICITY_METHODS.add(
+    "run",
+    completeness=True,
+    b_value=np.float,
+    use_3d=bool,
+    grid_limits=Grid,
+    Length_Limit=np.float,
+    BandWidth=np.float,
+    increment=bool)
+
+class WooMethod(object):
+    def run(self, catalogue, config, completeness=None):
+        sw = SmoothedSeismicityWoo(config['grid_limits'],
+                                   config['use_3d'],
+                                   config['b_value'])
+        return sw.run_analysis(
             catalogue, config, completeness_table=completeness)
