@@ -87,7 +87,9 @@ def plot_depth_histogram(catalogue, bin_width,  normalisation=False,
     # Create depth range
     if len(catalogue.data['depth']) == 0:
         raise ValueError('No depths reported in catalogue!')
-    depth_bins = np.arange(0., np.max(catalogue.data['depth']), bin_width)
+    depth_bins = np.arange(0.,
+                           np.max(catalogue.data['depth']) + bin_width,
+                           bin_width)
     depth_hist = catalogue.get_depth_distribution(depth_bins,
                                                   normalisation,
                                                   bootstrap)
@@ -261,7 +263,9 @@ def plot_magnitude_depth_density(catalogue, mag_int, depth_int, logscale=False,
     """
     if len(catalogue.data['depth']) == 0:
         raise ValueError('No depths reported in catalogue!')
-    depth_bins = np.arange(0., np.max(catalogue.data['depth']), depth_int)
+    depth_bins = np.arange(0.,
+                           np.max(catalogue.data['depth']) + depth_int,
+                           depth_int)
     mag_bins = _get_catalogue_bin_limits(catalogue, mag_int)
     mag_depth_dist = catalogue.get_magnitude_depth_distribution(mag_bins,
                                                                 depth_bins,
@@ -399,11 +403,14 @@ def plot_magnitude_time_density(catalogue, mag_int, time_int,
     plt.show()
     return
 
-
-
 def get_completeness_adjusted_table(catalogue, completeness, dmag, end_year):
     """
+<<<<<<< HEAD
     Counts the number of eq
+=======
+    Counts the number of earthquakes in each magnitude bin and normalises
+    the rate to annual rates, taking into account the completeness
+>>>>>>> master
     """
     inc = 1E-7
     # Find the natural bin limits
