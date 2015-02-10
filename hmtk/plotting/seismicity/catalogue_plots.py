@@ -325,20 +325,19 @@ def plot_magnitude_time_scatter(catalogue, plot_error=False, filename=None,
                      fmt=fmt_string,
                      **kwargs)
     else:
-        plt.plot(dtime, catalogue.data['magnitude'], fmt_string, **kwargs)
+        plt.scatter(dtime, catalogue.data['magnitude'], **kwargs)
 
-    if completeness_table != None:
+    if not completeness_table is None:
         #plt.step(completeness_table[1:,0], completeness_table[:-1,1], linewidth=2)
         plt.step(completeness_table[:,0], completeness_table[:,1], where='post', linewidth=2)
 
-    plt.xlabel('Year', fontsize='small')
-    plt.ylabel('Magnitude', fontsize='small')
-    plt.title('Magnitude-Time distribution', fontsize='medium')
+    plt.xlabel('Year', fontsize='medium')
+    plt.ylabel('Magnitude', fontsize='medium')
+    plt.title('Magnitude-Time distribution', fontsize='large')
 
     _save_image(filename, filetype, dpi)
     if not overlay:
         plt.show()
-
     return
 
 def plot_magnitude_time_density(catalogue, mag_int, time_int,

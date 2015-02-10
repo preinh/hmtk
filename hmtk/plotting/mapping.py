@@ -160,11 +160,11 @@ class HMTKBaseMap(object):
             urcrnrlon=uppcrnrlon, urcrnrlat=uppcrnrlat,
             projection='cyl', resolution=self.config['resolution'],
             area_thresh=1000.0, lat_0=lat0, lon_0=lon0)
-        self.m.drawcountries(color='0.8')
         self.m.drawmapboundary()
-        self.m.drawcoastlines(color='0.8')
-        self.m.drawstates(color='0.8')
-
+        self.m.drawcoastlines(color='0.9')
+        self.m.drawstates(color='0.95')
+        self.m.drawcountries(color='0.8')
+        
         self.m.drawmeridians(meridians,labels=[1,0,0,1],linewidth=0.0, fontsize=10)
         self.m.drawparallels(parallels,labels=[1,0,0,1],linewidth=0.0, fontsize=10)
         #plt.gca().tick_params(labelsize=10)
